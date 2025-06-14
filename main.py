@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from db import engine, Base, get_db
 from models import User
@@ -14,7 +14,7 @@ def health_check():
     return {"status": "ok"}
 
 @app.post("/users/")
-def create_user(user: UserCreate, db: Session = next(get_db())):
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = User(name=user.name, email=user.email)
     db.add(db_user)
     db.commit()
@@ -22,7 +22,7 @@ def create_user(user: UserCreate, db: Session = next(get_db())):
     return db_user
 
 @app.get("/users/")
-def read_users(db: Session = next(get_db())):
+def read_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
 if __name__ == "__main__":
