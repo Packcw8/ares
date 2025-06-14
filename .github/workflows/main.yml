@@ -16,11 +16,9 @@ jobs:
 
       - name: Show current working directory
         run: pwd
-        working-directory: ./ # Fix path
 
       - name: List all files (debug)
         run: ls -R
-        working-directory: ./ # Fix path
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,12 +29,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-        working-directory: ./ # Fix path
 
       - name: Zip app for deployment
         run: |
           zip -r release.zip . -x "venv/*" ".git/*" ".github/*"
-        working-directory: ./ # Fix path
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
