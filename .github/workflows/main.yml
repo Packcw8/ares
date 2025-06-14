@@ -1,20 +1,47 @@
-name: Check Folder Structure
+name: Deploy FastAPI App to Azure - ares-api-dev
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  debug-folders:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Print GitHub workspace path
-        run: echo "Workspace = ${{ github.workspace }}"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: List all folders and files
+      - name: Show working directory
+        run: pwd
+
+      - name: List files
+        run: ls -al
+
+      - name: Install dependencies
         run: |
-          pwd
-          ls -R
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Zip app for deployment
+        run: |
+          zip -r release.zip . -x "venv/*" ".git/*" ".github/*"
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'ares-api-dev'
+          slot-name: 'Production'
+          package: release.zip
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
