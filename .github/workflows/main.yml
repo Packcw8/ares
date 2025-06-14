@@ -39,6 +39,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'ares-api-dev'
-          slot-name: 'Production'
           package: release.zip
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
