@@ -1,52 +1,53 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime, func
-from sqlalchemy.orm import relationship
-from db import Base
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi import HTTPException, status, Depends
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from models.user import User
+from db import get_db
 
-# ---------- Rated Entity ----------
-class RatedEntity(Base):
-    __tablename__ = "rated_entities"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # 'official', 'agency', 'institution'
-    category = Column(String, nullable=True)  # e.g., 'judge', 'CPS', 'jail'
-    jurisdiction = Column(String)
-    reputation_score = Column(Float, default=100.0)
-    created_at = Column(DateTime, server_default=func.now())
+# JWT Config
+SECRET_KEY = "your_secret_key_here"  # Use env variable in production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-    ratings = relationship("RatingCategoryScore", back_populates="entity", cascade="all, delete-orphan")
-    evidence = relationship("EvidenceAttachment", back_populates="entity", cascade="all, delete-orphan")
-
-
-# ---------- Category-Based Score ----------
-class RatingCategoryScore(Base):
-    __tablename__ = "rating_scores"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    entity_id = Column(Integer, ForeignKey("rated_entities.id"), nullable=False)
-
-    accountability = Column(Integer)
-    respect = Column(Integer)
-    effectiveness = Column(Integer)
-    transparency = Column(Integer)
-    public_impact = Column(Integer)
-
-    comment = Column(String)
-    verified = Column(Boolean, default=False)
-    created_at = Column(DateTime, server_default=func.now())
-
-    entity = relationship("RatedEntity", back_populates="ratings")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# ---------- Evidence Attachments ----------
-class EvidenceAttachment(Base):
-    __tablename__ = "evidence_attachments"
-    id = Column(Integer, primary_key=True, index=True)
-    entity_id = Column(Integer, ForeignKey("rated_entities.id"), nullable=False)
-    score_id = Column(Integer, ForeignKey("rating_scores.id"), nullable=True)
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
-    file_url = Column(String)
-    case_number = Column(String)
-    location = Column(String)
-    created_at = Column(DateTime, server_default=func.now())
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-    entity = relationship("RatedEntity", back_populates="evidence")
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def authenticate_user(db: Session, email: str, password: str):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
