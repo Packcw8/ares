@@ -3,6 +3,7 @@ from db import engine, Base
 from routes.auth_routes import router as auth_router
 import uvicorn
 from routes.rating_routes import router as rating_router
+from fastapi.middleware.cors import CORSMiddleware  # <-- CORS import
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -10,7 +11,21 @@ Base.metadata.create_all(bind=engine)
 # Initialize FastAPI app
 app = FastAPI()
 
-# Include routes from auth module
+# CORS setup
+origins = [
+    "http://localhost:3000",  # Local dev
+    "https://zealous-field-079ebd30f.6.azurestaticapps.net",  # Deployed frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routes
 app.include_router(auth_router)
 app.include_router(rating_router)
 
