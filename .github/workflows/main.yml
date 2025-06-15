@@ -41,3 +41,4 @@ jobs:
           app-name: 'ares-api-dev'
           package: release.zip
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          clean: true
