@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db import get_db
-from models.official import Official, Complaint, Feedback
+from models.rating import Official, Complaint, Feedback
 from models.user import User
 from schemas.official_schemas import (
     OfficialCreate, OfficialOut,
