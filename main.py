@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from db import engine, Base, get_db
-from models import User
-from schemas import UserCreate
+from models.user import User
+from schemas.schemas import UserCreate
 import uvicorn
 
 # Create tables

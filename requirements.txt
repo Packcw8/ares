@@ -1,6 +1,19 @@
+# Web framework and server
 fastapi
 uvicorn[standard]
 gunicorn
+
+# Database
 sqlalchemy
 psycopg2-binary
+
+# Environment variables
 python-dotenv
+
+# Auth and Security
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Validation
+pydantic[email]
+email-validator
