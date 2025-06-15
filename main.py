@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from db import engine, Base
 from routes.auth_routes import router as auth_router
 import uvicorn
+from routes.official_routes import router as official_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -11,6 +12,7 @@ app = FastAPI()
 
 # Include routes from auth module
 app.include_router(auth_router)
+app.include_router(official_router)
 
 # Health check route
 @app.get("/health")
