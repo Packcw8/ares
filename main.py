@@ -14,7 +14,7 @@ app = FastAPI()
 # CORS setup
 origins = [
     "http://localhost:3000",  # Local dev
-    "https://zealous-field-079ebd30f.6.azurestaticapps.net",  # Deployed frontend
+    "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",  # Deployed frontend
 ]
 
 app.add_middleware(
