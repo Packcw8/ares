@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from db import engine, Base
 from routes.auth_routes import router as auth_router
-import uvicorn
 from routes.rating_routes import router as rating_router
-from fastapi.middleware.cors import CORSMiddleware  # <-- CORS import
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv  # <-- NEW
+load_dotenv()  # <-- NEW
+import uvicorn
+
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
