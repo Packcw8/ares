@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from db import get_db
 from models.rating import RatedEntity, RatingCategoryScore, EvidenceAttachment
-
 from models.user import User
 from utils.auth import get_current_user
 from schemas.rating_schemas import (
@@ -11,8 +10,31 @@ from schemas.rating_schemas import (
     EvidenceAttachmentCreate, EvidenceAttachmentOut
 )
 
-
 router = APIRouter(prefix="/ratings", tags=["ratings"])
+
+
+# ---------- Recalculate reputation based on all remaining ratings ----------
+def recalculate_reputation(entity_id: int, db: Session) -> float:
+    scores = db.query(RatingCategoryScore).filter(
+        RatingCategoryScore.entity_id == entity_id
+    ).all()
+
+    if not scores:
+        return 100.0
+
+    total = 0
+    for s in scores:
+        avg = sum([
+            s.accountability,
+            s.respect,
+            s.effectiveness,
+            s.transparency,
+            s.public_impact
+        ]) / 5
+        weight = 2.5 if s.verified else 1.5
+        total += (avg - 5) * weight
+
+    return max(0.0, 100.0 + total)
 
 
 # ---------- Create a Rated Entity ----------
@@ -29,10 +51,10 @@ def create_entity(entity: RatedEntityCreate, db: Session = Depends(get_db)):
 @router.get("/entities", response_model=list[RatedEntityOut])
 def list_entities(
     db: Session = Depends(get_db),
-    type: str = Query(None, description="Filter by entity type"),
-    category: str = Query(None, description="Filter by category"),
-    jurisdiction: str = Query(None, description="Filter by jurisdiction"),
-    sort_by: str = Query("reputation_score", description="Sort by reputation_score or created_at")
+    type: str = Query(None),
+    category: str = Query(None),
+    jurisdiction: str = Query(None),
+    sort_by: str = Query("reputation_score")
 ):
     query = db.query(RatedEntity)
     if type:
@@ -70,9 +92,84 @@ def submit_rating(
     )
 
     db.add(new_rating)
+
+    # Light immediate impact
+    avg_score = sum([
+        new_rating.accountability,
+        new_rating.respect,
+        new_rating.effectiveness,
+        new_rating.transparency,
+        new_rating.public_impact
+    ]) / 5
+
+    impact = (avg_score - 5) * 1.5
+
+    entity = db.query(RatedEntity).filter(RatedEntity.id == rating.entity_id).first()
+    if entity:
+        entity.reputation_score = max(0.0, entity.reputation_score + impact)
+
     db.commit()
     db.refresh(new_rating)
     return new_rating
+
+
+# ---------- Verify a Rating ----------
+@router.post("/verify-rating/{rating_id}", response_model=RatingCategoryScoreOut)
+def verify_rating(
+    rating_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    rating = db.query(RatingCategoryScore).filter(RatingCategoryScore.id == rating_id).first()
+    if not rating:
+        raise HTTPException(status_code=404, detail="Rating not found")
+    if rating.verified:
+        raise HTTPException(status_code=400, detail="Rating already verified")
+
+    rating.verified = True
+
+    avg_score = sum([
+        rating.accountability,
+        rating.respect,
+        rating.effectiveness,
+        rating.transparency,
+        rating.public_impact
+    ]) / 5
+
+    impact = (avg_score - 5) * 2.5
+
+    entity = db.query(RatedEntity).filter(RatedEntity.id == rating.entity_id).first()
+    if entity:
+        entity.reputation_score = max(0.0, entity.reputation_score + impact)
+
+    db.commit()
+    db.refresh(rating)
+    return rating
+
+
+# ---------- Delete Rating (False Complaint) ----------
+@router.delete("/delete-rating/{rating_id}")
+def delete_rating(
+    rating_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    rating = db.query(RatingCategoryScore).filter(RatingCategoryScore.id == rating_id).first()
+    if not rating:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    entity = db.query(RatedEntity).filter(RatedEntity.id == rating.entity_id).first()
+    if not entity:
+        raise HTTPException(status_code=404, detail="Associated entity not found")
+
+    db.delete(rating)
+    db.commit()
+
+    # Recalculate entity's reputation from scratch
+    entity.reputation_score = recalculate_reputation(entity.id, db)
+    db.commit()
+
+    return {"message": "Rating deleted and reputation recalculated", "new_score": entity.reputation_score}
 
 
 # ---------- Submit Evidence for a Rating ----------
@@ -87,37 +184,3 @@ def submit_evidence(
     db.commit()
     db.refresh(new_evidence)
     return new_evidence
-
-
-# ---------- Admin Verifies a Rating ----------
-@router.post("/verify-rating/{rating_id}", response_model=RatingCategoryScoreOut)
-def verify_rating(
-    rating_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)  # Optional: add admin check
-):
-    rating = db.query(RatingCategoryScore).filter(RatingCategoryScore.id == rating_id).first()
-    if not rating:
-        raise HTTPException(status_code=404, detail="Rating not found")
-    if rating.verified:
-        raise HTTPException(status_code=400, detail="Rating already verified")
-
-    rating.verified = True
-
-    # Adjust reputation
-    avg_score = sum([
-        rating.accountability,
-        rating.respect,
-        rating.effectiveness,
-        rating.transparency,
-        rating.public_impact
-    ]) / 5
-
-    deduction = (10 - avg_score) * 2  # Lower scores = bigger penalty
-    entity = db.query(RatedEntity).filter(RatedEntity.id == rating.entity_id).first()
-    if entity:
-        entity.reputation_score = max(0.0, entity.reputation_score - deduction)
-
-    db.commit()
-    db.refresh(rating)
-    return rating
