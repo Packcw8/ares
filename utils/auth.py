@@ -3,11 +3,12 @@ from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
 
-# Load values securely from environment
-SECRET_KEY = os.getenv("SECRET_KEY")
+# Load environment variables (assumed to be set in Azure App Service Configuration)
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key")  # Replace fallback if needed
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
+# Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
