@@ -1,6 +1,6 @@
 # Web framework and server
 fastapi
-uvicorn[standard]
+uvicorn==0.34.3
 gunicorn
 
 # Database
