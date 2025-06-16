@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from db import engine, Base
-from auth_routes import router as auth_router
-from rating_routes import router as rating_router
+from routes.auth_routes import router as auth_router
+from routes.rating_routes import router as rating_router
+from fastapi.middleware.cors import CORSMiddleware
 import os
+import uvicorn
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -10,23 +12,36 @@ Base.metadata.create_all(bind=engine)
 # Initialize FastAPI app
 app = FastAPI()
 
-# Include your routers
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(rating_router, prefix="/ratings", tags=["ratings"])
+# CORS setup
+origins = [
+    "http://localhost:3000",  # Local dev
+    "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",  # Deployed frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(auth_router)
+app.include_router(rating_router)
 
 # Health check route
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-# TEMP: Debug environment variable from Azure
+# TEMP: Debug Azure's environment variable
 @app.get("/debug-db")
 def debug_db():
     return {
         "DATABASE_URL": os.getenv("DATABASE_URL")
     }
 
-# Only used for local development
+# Entry point for local development
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
