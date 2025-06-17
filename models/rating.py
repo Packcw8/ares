@@ -33,7 +33,7 @@ class RatingCategoryScore(Base):
     transparency = Column(Integer)
     public_impact = Column(Integer)
 
-    comment = Column(String)
+    comment = Column(String(2000))  # or longer if needed
     verified = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
 
