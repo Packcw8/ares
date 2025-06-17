@@ -199,3 +199,8 @@ def submit_evidence(
     db.commit()
     db.refresh(new_evidence)
     return new_evidence
+# ---------- Get All Reviews for One Entity ----------
+@router.get("/entity/{entity_id}/reviews", response_model=list[RatingCategoryScoreOut])
+def get_entity_reviews(entity_id: int, db: Session = Depends(get_db)):
+    reviews = db.query(RatingCategoryScore).filter(RatingCategoryScore.entity_id == entity_id).all()
+    return reviews
