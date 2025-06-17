@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func  # ✅ Added for case-insensitive duplicate check
 from db import get_db
 from models.rating import RatedEntity, RatingCategoryScore, EvidenceAttachment
 from models.user import User
@@ -40,6 +41,20 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
 # ---------- Create a Rated Entity ----------
 @router.post("/entities", response_model=RatedEntityOut)
 def create_entity(entity: RatedEntityCreate, db: Session = Depends(get_db)):
+    # ✅ Case-insensitive duplicate check
+    existing = db.query(RatedEntity).filter(
+        func.lower(RatedEntity.name) == entity.name.strip().lower(),
+        RatedEntity.type == entity.type,
+        RatedEntity.state == entity.state,
+        RatedEntity.county == entity.county
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="An entity with the same name, type, state, and county already exists."
+        )
+
     new_entity = RatedEntity(**entity.dict())
     db.add(new_entity)
     db.commit()
