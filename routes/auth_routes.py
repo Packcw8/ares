@@ -30,5 +30,5 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = authenticate_user(db, user.email, user.password)
     if not db_user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    access_token = create_access_token(data={"sub": db_user.id})
+    access_token = create_access_token(data={"sub": str(db_user.id)})  # ✅ cast to str
     return {"access_token": access_token, "token_type": "bearer"}

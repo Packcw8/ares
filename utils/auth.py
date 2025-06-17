@@ -14,7 +14,7 @@ from db import get_db
 # -------------------------------
 # Config (use Azure env vars)
 # -------------------------------
-SECRET_KEY = os.getenv("SECRET_KEY", "your_fallback_dev_key")  # Set securely in production
+SECRET_KEY = os.getenv("SECRET_KEY", "your_fallback_dev_key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
@@ -66,10 +66,10 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
+        user_id = int(payload.get("sub"))  # ✅ convert to int
         if user_id is None:
             raise credentials_exception
-    except JWTError:
+    except (JWTError, ValueError):
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
