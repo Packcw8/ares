@@ -4,11 +4,16 @@ from typing import Optional
 
 
 # ---------- RatedEntity ----------
+# rating_schemas.py
+
 class RatedEntityCreate(BaseModel):
     name: str
     type: str  # e.g. "individual", "agency", "institution"
     category: str  # e.g. "judge", "CPS", "hospital"
     jurisdiction: Optional[str] = None
+    state: str
+    county: str
+
 
 
 class RatedEntityOut(RatedEntityCreate):

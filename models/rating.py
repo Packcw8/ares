@@ -10,11 +10,14 @@ class RatedEntity(Base):
     type = Column(String, nullable=False)  # 'official', 'agency', 'institution'
     category = Column(String, nullable=True)  # e.g., 'judge', 'CPS', 'jail'
     jurisdiction = Column(String)
+    state = Column(String, nullable=False, index=True)     # <-- NEW
+    county = Column(String, nullable=False, index=True)    # <-- NEW
     reputation_score = Column(Float, default=100.0)
     created_at = Column(DateTime, server_default=func.now())
 
     ratings = relationship("RatingCategoryScore", back_populates="entity", cascade="all, delete-orphan")
     evidence = relationship("EvidenceAttachment", back_populates="entity", cascade="all, delete-orphan")
+
 
 
 # ---------- Category-Based Score ----------
