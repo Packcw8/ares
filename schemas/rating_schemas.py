@@ -23,7 +23,6 @@ class RatedEntityOut(RatedEntityCreate):
 # ---------- RatingCategoryScore ----------
 class RatingCategoryScoreCreate(BaseModel):
     entity_id: int
-    user_id: int
     accountability: int
     respect: int
     effectiveness: int
@@ -36,6 +35,7 @@ class RatingCategoryScoreOut(RatingCategoryScoreCreate):
     id: int
     verified: bool
     created_at: datetime
+    user_id: int  # include for output, not input
 
     class Config:
         from_attributes = True
