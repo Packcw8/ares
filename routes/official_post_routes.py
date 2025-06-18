@@ -8,6 +8,7 @@ from utils.auth import get_current_user
 
 router = APIRouter(prefix="/forum", tags=["official_posts"])
 
+
 # ✅ Create a post (official or admin only)
 @router.post("/create", response_model=OfficialPostOut)
 def create_post(
@@ -23,17 +24,22 @@ def create_post(
         body=post.body,
         author_id=current_user.id,
         entity_id=post.entity_id,
-        verified=True
+        verified=True,
+        is_pinned=post.is_pinned,
+        is_ama=post.is_ama,
+        tags=post.tags
     )
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
     return new_post
 
+
 # ✅ Get all posts
 @router.get("/", response_model=list[OfficialPostOut])
 def list_posts(db: Session = Depends(get_db)):
     return db.query(OfficialPost).order_by(OfficialPost.created_at.desc()).all()
+
 
 # ✅ Get single post
 @router.get("/{post_id}", response_model=OfficialPostOut)
