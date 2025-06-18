@@ -1,11 +1,8 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, List
 
 # ---------- RatedEntity ----------
-# rating_schemas.py
-
 class RatedEntityCreate(BaseModel):
     name: str
     type: str  # e.g. "individual", "agency", "institution"
@@ -13,7 +10,6 @@ class RatedEntityCreate(BaseModel):
     jurisdiction: Optional[str] = None
     state: str
     county: str
-
 
 
 class RatedEntityOut(RatedEntityCreate):
@@ -34,6 +30,7 @@ class RatingCategoryScoreCreate(BaseModel):
     transparency: int
     public_impact: int
     comment: Optional[str] = None
+    violated_rights: Optional[List[str]] = []  # ✅ Added field for tagging constitutional violations
 
 
 class RatingCategoryScoreOut(RatingCategoryScoreCreate):

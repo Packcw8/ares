@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func  # ✅ Added for case-insensitive duplicate check
+from sqlalchemy import func
 from db import get_db
 from models.rating import RatedEntity, RatingCategoryScore, EvidenceAttachment
 from models.user import User
@@ -41,7 +41,6 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
 # ---------- Create a Rated Entity ----------
 @router.post("/entities", response_model=RatedEntityOut)
 def create_entity(entity: RatedEntityCreate, db: Session = Depends(get_db)):
-    # ✅ Case-insensitive duplicate check
     existing = db.query(RatedEntity).filter(
         func.lower(RatedEntity.name) == entity.name.strip().lower(),
         RatedEntity.type == entity.type,
@@ -103,6 +102,7 @@ def submit_rating(
         transparency=rating.transparency,
         public_impact=rating.public_impact,
         comment=rating.comment,
+        violated_rights=rating.violated_rights or [],  # ✅ Safe handling of optional rights
         verified=False,
     )
 
@@ -199,11 +199,14 @@ def submit_evidence(
     db.commit()
     db.refresh(new_evidence)
     return new_evidence
+
+
 # ---------- Get All Reviews for One Entity ----------
 @router.get("/entity/{entity_id}/reviews", response_model=list[RatingCategoryScoreOut])
 def get_entity_reviews(entity_id: int, db: Session = Depends(get_db)):
     reviews = db.query(RatingCategoryScore).filter(RatingCategoryScore.entity_id == entity_id).all()
     return reviews
+
 
 # ---------- Get Current User's Civic Impact ----------
 @router.get("/user/impact")

@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime, func
 from sqlalchemy.orm import relationship
 from db import Base
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Column, String
 
 # ---------- Rated Entity ----------
 class RatedEntity(Base):
@@ -38,6 +40,7 @@ class RatingCategoryScore(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     entity = relationship("RatedEntity", back_populates="ratings")
+    violated_rights = Column(ARRAY(String), nullable=True, default=[])
 
 
 # ---------- Evidence Attachments ----------
