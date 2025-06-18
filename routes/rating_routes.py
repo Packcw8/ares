@@ -204,3 +204,27 @@ def submit_evidence(
 def get_entity_reviews(entity_id: int, db: Session = Depends(get_db)):
     reviews = db.query(RatingCategoryScore).filter(RatingCategoryScore.entity_id == entity_id).all()
     return reviews
+
+# ---------- Get Current User's Civic Impact ----------
+@router.get("/user/impact")
+def get_user_impact(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    total = db.query(RatingCategoryScore).filter(RatingCategoryScore.user_id == current_user.id).count()
+    verified = db.query(RatingCategoryScore).filter(
+        RatingCategoryScore.user_id == current_user.id,
+        RatingCategoryScore.verified == True
+    ).count()
+
+    top_comment = db.query(RatingCategoryScore).filter(
+        RatingCategoryScore.user_id == current_user.id,
+        RatingCategoryScore.comment != None
+    ).order_by(RatingCategoryScore.created_at.desc()).first()
+
+    return {
+        "name": current_user.name,
+        "total_submitted": total,
+        "verified_count": verified,
+        "top_comment": top_comment.comment if top_comment else None,
+    }
