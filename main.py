@@ -5,6 +5,8 @@ from routes.rating_routes import router as rating_router
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uvicorn
+from routes.official_post_routes import router as official_post_router
+from routes.post_comment_routes import router as post_comment_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -29,6 +31,8 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(rating_router)
+app.include_router(official_post_router)
+app.include_router(post_comment_router)
 
 # Health check route
 @app.get("/health")
