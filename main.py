@@ -9,7 +9,7 @@ from routes.official_post_routes import router as official_post_router
 from routes.post_comment_routes import router as post_comment_router
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -46,12 +46,8 @@ def debug_db():
         "DATABASE_URL": os.getenv("DATABASE_URL")
     }
 
-# ✅ TEMP: Debug SECRET_KEY loading from environment
-@app.get("/debug-secret")
-def debug_secret():
-    return {
-        "SECRET_KEY": os.getenv("SECRET_KEY")
-    }
+
+
 
 # Entry point for local development
 if __name__ == "__main__":
