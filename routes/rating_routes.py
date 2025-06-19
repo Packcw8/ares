@@ -250,7 +250,7 @@ def get_user_impact(
 @router.post("/flag-rating/{rating_id}")
 def flag_rating(
     rating_id: int,
-    reason: str,
+    flag: FlagRequest,  # 👈 Accepts JSON body like { "reason": "example" }
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -259,11 +259,12 @@ def flag_rating(
         raise HTTPException(status_code=404, detail="Rating not found")
 
     rating.flagged = True
-    rating.flag_reason = reason
+    rating.flag_reason = flag.reason
     rating.flagged_by = current_user.id
 
     db.commit()
     return {"message": "Rating flagged for admin review"}
+
 
 @router.get("/admin/flagged-ratings", response_model=list[RatingCategoryScoreOut])
 def get_flagged_ratings(
