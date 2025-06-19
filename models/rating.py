@@ -41,6 +41,9 @@ class RatingCategoryScore(Base):
 
     entity = relationship("RatedEntity", back_populates="ratings")
     violated_rights = Column(ARRAY(String), nullable=True, default=[])
+    flagged = Column(Boolean, default=False)
+    flag_reason = Column(String(1000), nullable=True)
+    flagged_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 # ---------- Evidence Attachments ----------

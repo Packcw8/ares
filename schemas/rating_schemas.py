@@ -38,9 +38,12 @@ class RatingCategoryScoreOut(RatingCategoryScoreCreate):
     verified: bool
     created_at: datetime
     user_id: int  # include for output, not input
+    flagged: bool
+    flag_reason: Optional[str]
 
     class Config:
         from_attributes = True
+
 
 
 # ---------- EvidenceAttachment ----------

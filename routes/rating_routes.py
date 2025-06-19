@@ -244,3 +244,23 @@ def get_user_impact(
         "civic_score": civic_score,
         "tier": tier,
     }
+
+# ---------- Get Flagged Properties ----------
+
+@router.post("/flag-rating/{rating_id}")
+def flag_rating(
+    rating_id: int,
+    reason: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    rating = db.query(RatingCategoryScore).filter(RatingCategoryScore.id == rating_id).first()
+    if not rating:
+        raise HTTPException(status_code=404, detail="Rating not found")
+
+    rating.flagged = True
+    rating.flag_reason = reason
+    rating.flagged_by = current_user.id
+
+    db.commit()
+    return {"message": "Rating flagged for admin review"}
