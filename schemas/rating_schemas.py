@@ -37,12 +37,14 @@ class RatingCategoryScoreOut(RatingCategoryScoreCreate):
     id: int
     verified: bool
     created_at: datetime
-    user_id: int  # include for output, not input
-    flagged: bool
-    flag_reason: Optional[str]
+    user_id: int
+    flagged: Optional[bool] = False
+    flag_reason: Optional[str] = None
+    flagged_by: Optional[int] = None  # ✅ ADD THIS LINE
 
     class Config:
         from_attributes = True
+
 
 
 
