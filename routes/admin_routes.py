@@ -60,3 +60,19 @@ def delete_user(
     db.commit()
     return {"message": f"User {user.username} deleted successfully."}
 
+@router.get("/unverified-officials")
+def get_unverified_officials(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin)
+):
+    officials = db.query(User).filter(User.role == "official", User.is_verified == False).all()
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "is_verified": user.is_verified
+        }
+        for user in officials
+    ]

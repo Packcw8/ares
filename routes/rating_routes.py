@@ -276,3 +276,12 @@ def get_flagged_ratings(
 
     return db.query(RatingCategoryScore).filter(RatingCategoryScore.flagged == True).all()
 
+@router.get("/unverified", response_model=list[RatingCategoryScoreOut])
+def get_unverified_ratings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return db.query(RatingCategoryScore).filter(RatingCategoryScore.verified == False).all()
