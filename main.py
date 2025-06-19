@@ -7,16 +7,11 @@ from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.proxy_headers import ProxyHeadersMiddleware  # ✅ NEW
-
 import os
 import uvicorn
 
 # Initialize FastAPI app
 app = FastAPI()
-
-# ✅ Fix redirect behavior behind Azure reverse proxy
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # CORS setup
 origins = [
@@ -53,4 +48,4 @@ def debug_db():
 
 # Entry point for local development
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, proxy_headers=True)  # ✅ Add this here for local
