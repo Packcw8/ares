@@ -2,18 +2,21 @@ from fastapi import FastAPI
 from db import engine, Base
 from routes.auth_routes import router as auth_router
 from routes.rating_routes import router as rating_router
-from fastapi.middleware.cors import CORSMiddleware
-import os
-import uvicorn
 from routes.official_post_routes import router as official_post_router
 from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
 
-# Create database tables
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.proxy_headers import ProxyHeadersMiddleware  # ✅ NEW
 
+import os
+import uvicorn
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# ✅ Fix redirect behavior behind Azure reverse proxy
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # CORS setup
 origins = [
@@ -47,9 +50,6 @@ def debug_db():
     return {
         "DATABASE_URL": os.getenv("DATABASE_URL")
     }
-
-
-
 
 # Entry point for local development
 if __name__ == "__main__":
