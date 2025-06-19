@@ -16,7 +16,7 @@ def create_post(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not current_user.is_official and not current_user.is_admin:
+    if current_user.role not in ("official", "admin"):  # ✅ FIXED LINE
         raise HTTPException(status_code=403, detail="Only officials can post")
 
     new_post = OfficialPost(
