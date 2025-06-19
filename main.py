@@ -7,11 +7,26 @@ from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
 import os
 import uvicorn
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Custom proxy trust middleware for Azure
+class CustomProxyHeaderMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.headers.get("x-forwarded-proto") == "https":
+            request.scope["scheme"] = "https"
+        return await call_next(request)
+
+# Add middleware
+app.add_middleware(CustomProxyHeaderMiddleware)
+app.add_middleware(HTTPSRedirectMiddleware)
 
 # CORS setup
 origins = [
@@ -48,4 +63,4 @@ def debug_db():
 
 # Entry point for local development
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, proxy_headers=True)  # ✅ Add this here for local
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, proxy_headers=True)
