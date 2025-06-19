@@ -42,7 +42,8 @@ class RatingCategoryScoreOut(RatingCategoryScoreCreate):
     user_id: int
     flagged: Optional[bool] = False
     flag_reason: Optional[str] = None
-    flagged_by: Optional[int] = None  # ✅ ADD THIS LINE
+    flagged_by: Optional[int] = None
+    entity: Optional[RatedEntityOut] = None
 
     class Config:
         from_attributes = True
