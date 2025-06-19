@@ -225,9 +225,22 @@ def get_user_impact(
         RatingCategoryScore.comment != None
     ).order_by(RatingCategoryScore.created_at.desc()).first()
 
+    # Calculate civic score and tier
+    civic_score = verified * 10 + (total - verified) * 2
+    if civic_score >= 100:
+        tier = "Constitutional Defender"
+    elif civic_score >= 50:
+        tier = "Rights Watcher"
+    elif civic_score >= 25:
+        tier = "Local Sentinel"
+    else:
+        tier = "Citizen"
+
     return {
-        "name": current_user.name,
+        "username": current_user.username,
         "total_submitted": total,
         "verified_count": verified,
         "top_comment": top_comment.comment if top_comment else None,
+        "civic_score": civic_score,
+        "tier": tier,
     }
