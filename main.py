@@ -5,6 +5,8 @@ from routes.rating_routes import router as rating_router
 from routes.official_post_routes import router as official_post_router
 from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
+from fastapi.responses import RedirectResponse
+from fastapi import Request
 
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -33,6 +35,10 @@ app.include_router(rating_router)
 app.include_router(official_post_router)
 app.include_router(post_comment_router)
 app.include_router(admin_router)
+
+@app.get("/forum", include_in_schema=False)
+async def forum_redirect(request: Request):
+    return RedirectResponse(url=str(request.url) + "/")
 
 # Health check route
 @app.get("/health")
