@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
 
+
+
 # ---------- RatedEntity ----------
 class RatedEntityCreate(BaseModel):
     name: str
@@ -61,3 +63,6 @@ class EvidenceAttachmentOut(EvidenceAttachmentCreate):
 
     class Config:
         from_attributes = True
+
+class FlagRequest(BaseModel):
+    reason: str

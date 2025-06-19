@@ -8,7 +8,7 @@ from utils.auth import get_current_user
 from schemas.rating_schemas import (
     RatedEntityCreate, RatedEntityOut,
     RatingCategoryScoreCreate, RatingCategoryScoreOut,
-    EvidenceAttachmentCreate, EvidenceAttachmentOut
+    EvidenceAttachmentCreate, EvidenceAttachmentOut, FlagRequest,
 )
 
 router = APIRouter(prefix="/ratings", tags=["ratings"])
