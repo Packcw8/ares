@@ -18,12 +18,17 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     if existing_username:
         raise HTTPException(status_code=400, detail="Username already taken")
 
+    # Always set official users as unverified
+    is_verified = False if user.role == "official" else True
+
     new_user = User(
         username=user.username,
         email=user.email,
         hashed_password=hash_password(user.password),
-        role=user.role
+        role=user.role,
+        is_verified=is_verified
     )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
