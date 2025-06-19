@@ -1,15 +1,17 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 class UserCreate(BaseModel):
-    name: str
+    username: str
     email: EmailStr
-    password: str  # plain-text password input
+    password: str
+    role: str = Field(default="official", pattern="^official$")  # ✅ restrict to 'official' only
 
 class UserOut(BaseModel):
     id: int
-    name: str
+    username: str
     email: EmailStr
     is_anonymous: bool
+    role: str
 
     model_config = {
         "from_attributes": True

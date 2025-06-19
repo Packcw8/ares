@@ -76,3 +76,19 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+# -------------------------------
+# Role-based Access Dependency
+# -------------------------------
+def require_role(required_role: str):
+    def checker(current_user: User = Depends(get_current_user)):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: {required_role} role required"
+            )
+        return current_user
+    return checker
+
+def require_admin(current_user: User = Depends(get_current_user)):
+    return require_role("admin")(current_user)
