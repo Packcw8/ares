@@ -141,8 +141,13 @@ def verify_rating(
     if rating.verified:
         raise HTTPException(status_code=400, detail="Rating already verified")
 
+    # ✅ Mark as verified and remove any flags
     rating.verified = True
+    rating.flagged = False
+    rating.flag_reason = None
+    rating.flagged_by = None
 
+    # ✅ Adjust reputation
     avg_score = sum([
         rating.accountability,
         rating.respect,
