@@ -4,6 +4,8 @@ from db import get_db
 from models.evidence import Evidence
 from schemas.evidence import EvidenceOut
 from utils.blob_utils import upload_file_to_azure
+from utils.auth import get_current_user
+from models.user import User
 import traceback
 
 router = APIRouter(prefix="/vault", tags=["evidence"])
@@ -16,7 +18,9 @@ async def upload_evidence(
     location: str = Form(""),
     is_public: bool = Form(True),
     is_anonymous: bool = Form(False),
+    entity_id: int = Form(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     try:
         blob_url = await upload_file_to_azure(file)
@@ -27,7 +31,9 @@ async def upload_evidence(
             tags=tags,
             location=location,
             is_public=is_public,
-            is_anonymous=is_anonymous
+            is_anonymous=is_anonymous,
+            entity_id=entity_id,
+            user_id=None if is_anonymous else current_user.id
         )
 
         db.add(evidence)
@@ -40,8 +46,6 @@ async def upload_evidence(
         print("[ERROR] Upload route failed")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Evidence upload failed.")
-
-
 
 @router.get("/public", response_model=list[EvidenceOut])
 def list_public_evidence(db: Session = Depends(get_db)):

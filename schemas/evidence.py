@@ -9,6 +9,8 @@ class EvidenceCreate(BaseModel):
     location: Optional[str]
     is_public: bool
     is_anonymous: bool
+    entity_id: int  # required
+    user_id: Optional[int] = None  # optional, backend usually fills this
 
 class EvidenceOut(EvidenceCreate):
     id: int
@@ -16,5 +18,3 @@ class EvidenceOut(EvidenceCreate):
 
     class Config:
         orm_mode = True
-
-
