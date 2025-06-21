@@ -1,28 +1,33 @@
 import os
+import sys
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+from dotenv import load_dotenv
 
-# ✅ Load metadata from Base and all models
+# Add project root to Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Load .env file
+load_dotenv()
+
+# Import your models and metadata
 from db import Base
-from models import (
-    user,
-    rating,
-    official_post,
-    post_comment,
-)
+from models.evidence import Evidence
 
+# Alembic configuration
 config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
-# ✅ Set the actual DB URL from the environment
-config.set_main_option('sqlalchemy.url', os.getenv("DATABASE_URL"))
+# Get DB URL from environment
+url = os.getenv("DATABASE_URL")
+if not url:
+    raise Exception("DATABASE_URL environment variable not set")
 
-fileConfig(config.config_file_name)
 target_metadata = Base.metadata
 
-
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -32,10 +37,9 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
-
 def run_migrations_online():
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        {"sqlalchemy.url": url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
@@ -46,7 +50,6 @@ def run_migrations_online():
         )
         with context.begin_transaction():
             context.run_migrations()
-
 
 if context.is_offline_mode():
     run_migrations_offline()
