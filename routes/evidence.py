@@ -4,6 +4,7 @@ from db import get_db
 from models.evidence import Evidence
 from schemas.evidence import EvidenceOut
 from utils.blob_utils import upload_file_to_azure
+import traceback
 
 router = APIRouter(prefix="/vault", tags=["evidence"])
 
@@ -36,5 +37,6 @@ async def upload_evidence(
         return evidence
 
     except Exception as e:
-        print(f"[ERROR] Upload route failed: {e}")
+        print("[ERROR] Upload route failed")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Evidence upload failed.")
