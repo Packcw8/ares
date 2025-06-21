@@ -7,6 +7,7 @@ from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
 from fastapi.responses import RedirectResponse
 from fastapi import Request
+from routes import evidence
 
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -35,6 +36,7 @@ app.include_router(rating_router)
 app.include_router(official_post_router)
 app.include_router(post_comment_router)
 app.include_router(admin_router)
+app.include_router(evidence.router)
 
 @app.get("/forum", include_in_schema=False)
 async def forum_redirect(request: Request):
