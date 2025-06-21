@@ -15,12 +15,15 @@ container_client = blob_service_client.get_container_client(container_name)
 
 # Upload helper
 async def upload_file_to_azure(file: UploadFile) -> str:
-    file_id = str(uuid4())
-    blob_name = f"{file_id}_{file.filename}"
+    try:
+        file_id = str(uuid4())
+        blob_name = f"{file_id}_{file.filename}"
+        blob_client = container_client.get_blob_client(blob_name)
 
-    blob_client = container_client.get_blob_client(blob_name)
-    file_data = await file.read()
+        file_data = await file.read()
+        blob_client.upload_blob(file_data, overwrite=True)
 
-    blob_client.upload_blob(file_data, overwrite=True)
-
-    return blob_client.url  # Can be secured with SAS if needed later
+        return blob_client.url
+    except Exception as e:
+        print(f"[ERROR] Azure blob upload failed: {e}")
+        raise
