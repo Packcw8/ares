@@ -40,3 +40,9 @@ async def upload_evidence(
         print("[ERROR] Upload route failed")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Evidence upload failed.")
+
+
+
+@router.get("/public", response_model=list[EvidenceOut])
+def list_public_evidence(db: Session = Depends(get_db)):
+    return db.query(Evidence).filter(Evidence.is_public == True).order_by(Evidence.timestamp.desc()).all()
