@@ -22,3 +22,4 @@ bcrypt==3.2.0
 
 azure-identity
 azure-storage-blob
+python-multipart
