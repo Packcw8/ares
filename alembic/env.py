@@ -14,6 +14,8 @@ load_dotenv()
 # Import your models and metadata
 from db import Base
 from models.evidence import Evidence
+# Force Evidence model to register with Base.metadata
+assert Evidence.__table__ in Base.metadata.tables.values()
 
 # Alembic configuration
 config = context.config
