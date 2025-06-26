@@ -19,7 +19,8 @@ app = FastAPI()
 # CORS setup
 origins = [
     "http://localhost:3000",  # Local dev
-    "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",  # Deployed frontend
+    "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",
+    "https://www.aresjustice.com",# Deployed frontend
 ]
 
 app.add_middleware(
