@@ -20,7 +20,8 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",  # Local dev
     "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",
-    "https://www.aresjustice.com",# Deployed frontend
+    "https://www.aresjustice.com",
+    "https://aresjustice.com",
 ]
 
 app.add_middleware(
