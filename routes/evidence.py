@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -12,9 +12,8 @@ router = APIRouter(prefix="/vault", tags=["evidence"])
 
 
 # ======================================================
-# 1️⃣ Upload Evidence (FILE + METADATA)
+# 1️⃣ Upload Evidence (LOGIN REQUIRED)
 # ======================================================
-
 @router.post("", response_model=dict)
 async def upload_evidence(
     file: UploadFile = File(...),
@@ -29,15 +28,10 @@ async def upload_evidence(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Fully backend-handled evidence upload.
-    """
-
     if not file:
         raise HTTPException(status_code=400, detail="File required")
 
     try:
-        # ✅ FIXED: correct argument name
         blob_url = upload_file_to_b2(
             file_obj=file.file,
             original_filename=file.filename,
@@ -69,9 +63,8 @@ async def upload_evidence(
 
 
 # ======================================================
-# 2️⃣ Vault Feed (Public)
+# 2️⃣ Vault Feed (PUBLIC READ)
 # ======================================================
-
 @router.get("/feed")
 def vault_feed(db: Session = Depends(get_db), limit: int = 20):
     evidence_items = (
@@ -104,9 +97,8 @@ def vault_feed(db: Session = Depends(get_db), limit: int = 20):
 
 
 # ======================================================
-# 3️⃣ Single Evidence Detail
+# 3️⃣ Single Evidence Detail (PUBLIC READ)
 # ======================================================
-
 @router.get("/{evidence_id}")
 def get_evidence_detail(evidence_id: int, db: Session = Depends(get_db)):
     evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
@@ -130,3 +122,35 @@ def get_evidence_detail(evidence_id: int, db: Session = Depends(get_db)):
             "county": evidence.entity.county,
         },
     }
+
+
+# ======================================================
+# 4️⃣ DELETE EVIDENCE (OWNER ONLY)
+# ======================================================
+@router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_evidence(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+
+    # 🔒 Anonymous uploads cannot be deleted by users
+    if evidence.is_anonymous or evidence.user_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous evidence cannot be deleted by users",
+        )
+
+    if evidence.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to delete this evidence",
+        )
+
+    db.delete(evidence)
+    db.commit()
+    return
