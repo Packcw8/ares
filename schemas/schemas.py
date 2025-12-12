@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional
 
 
@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     password: str
     role: str = Field(default="citizen")
 
-    # Official-only fields
+    # Official-only fields (nullable in DB, validated here)
     full_name: Optional[str] = None
     title: Optional[str] = None
     agency: Optional[str] = None
@@ -16,17 +16,33 @@ class UserCreate(BaseModel):
     state: Optional[str] = None
     jurisdiction: Optional[str] = None
 
-    @validator("role")
-    def validate_role(cls, v):
-        if v not in {"citizen", "official"}:
-            raise ValueError("Only 'citizen' or 'official' roles are allowed at signup")
-        return v
+    @model_validator(mode="after")
+    def validate_official_fields(self):
+        if self.role == "official":
+            missing = []
 
-    @validator("full_name", "title", "agency", "official_email", "state", "jurisdiction", always=True)
-    def validate_official_fields(cls, v, values, field):
-        if values.get("role") == "official" and not v:
-            raise ValueError(f"{field.name.replace('_', ' ').title()} is required for officials")
-        return v
+            if not self.full_name:
+                missing.append("full_name")
+            if not self.title:
+                missing.append("title")
+            if not self.agency:
+                missing.append("agency")
+            if not self.official_email:
+                missing.append("official_email")
+            if not self.state:
+                missing.append("state")
+            if not self.jurisdiction:
+                missing.append("jurisdiction")
+
+            if missing:
+                raise ValueError(
+                    f"Missing required official fields: {', '.join(missing)}"
+                )
+
+        if self.role not in {"citizen", "official"}:
+            raise ValueError("Invalid role")
+
+        return self
 
 
 class UserOut(BaseModel):
