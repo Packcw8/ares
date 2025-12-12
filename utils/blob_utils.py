@@ -1,40 +1,42 @@
-import boto3
 import os
-from uuid import uuid4
+import boto3
+import uuid
 
-# 🔐 Backblaze B2 (S3-compatible) ENV VARS — MATCH RENDER
-B2_ENDPOINT = os.getenv("B2_ENDPOINT_URL")
-B2_BUCKET = os.getenv("B2_BUCKET_NAME")
+# Required environment variables (Render)
+B2_ENDPOINT_URL = os.getenv("B2_ENDPOINT_URL")        # https://s3.us-east-005.backblazeb2.com
 B2_KEY_ID = os.getenv("B2_KEY_ID")
-B2_APP_KEY = os.getenv("B2_APPLICATION_KEY")
+B2_APPLICATION_KEY = os.getenv("B2_APPLICATION_KEY")
+B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME")          # ares-evidence
 
-if not all([B2_ENDPOINT, B2_BUCKET, B2_KEY_ID, B2_APP_KEY]):
-    raise RuntimeError("❌ Missing Backblaze B2 environment variables")
+if not all([B2_ENDPOINT_URL, B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME]):
+    raise RuntimeError("Missing Backblaze B2 environment variables")
 
 s3 = boto3.client(
     "s3",
-    endpoint_url=B2_ENDPOINT,
+    endpoint_url=B2_ENDPOINT_URL,
     aws_access_key_id=B2_KEY_ID,
-    aws_secret_access_key=B2_APP_KEY,
+    aws_secret_access_key=B2_APPLICATION_KEY,
 )
 
-def generate_presigned_upload(filename: str, content_type: str):
-    key = f"evidence/{uuid4()}_{filename}"
+def upload_file_to_b2(
+    *,
+    file_obj,
+    original_filename: str,
+    content_type: str,
+    folder: str = "evidence",
+) -> str:
+    """
+    Uploads a file stream to Backblaze B2 and returns the public file URL.
+    """
 
-    upload_url = s3.generate_presigned_url(
-        ClientMethod="put_object",
-        Params={
-            "Bucket": B2_BUCKET,
-            "Key": key,
-            "ContentType": content_type,
-        },
-        ExpiresIn=3600,  # 1 hour
+    ext = os.path.splitext(original_filename)[1]
+    filename = f"{folder}/{uuid.uuid4()}{ext}"
+
+    s3.upload_fileobj(
+        Fileobj=file_obj,
+        Bucket=B2_BUCKET_NAME,
+        Key=filename,
+        ExtraArgs={"ContentType": content_type},
     )
 
-    file_url = f"{B2_ENDPOINT}/{B2_BUCKET}/{key}"
-
-    return {
-        "upload_url": upload_url,
-        "file_url": file_url,
-        "key": key,
-    }
+    return f"{B2_ENDPOINT_URL}/{B2_BUCKET_NAME}/{filename}"

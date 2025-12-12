@@ -1,76 +1,60 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from typing import Optional
 
 from db import get_db
 from models.evidence import Evidence
 from models.user import User
 from utils.auth import get_current_user
-from utils.blob_utils import generate_presigned_upload
+from utils.blob_utils import upload_file_to_b2
 
 router = APIRouter(prefix="/vault", tags=["evidence"])
 
-# ======================================================
-# Schemas (local to keep this file self-contained)
-# ======================================================
-
-class UploadURLRequest(BaseModel):
-    filename: str
-    content_type: str
-
-
-class EvidenceCreate(BaseModel):
-    blob_url: str
-    description: str | None = None
-    tags: str | None = None
-    location: str | None = None
-    is_public: bool = True
-    is_anonymous: bool = False
-    entity_id: int
-
 
 # ======================================================
-# 1️⃣ Generate Backblaze Upload URL
-# ======================================================
-
-@router.post("/upload-url")
-def get_upload_url(
-    payload: UploadURLRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Returns a presigned Backblaze upload URL.
-    Frontend uploads the file directly to B2.
-    """
-    return generate_presigned_upload(
-        filename=payload.filename,
-        content_type=payload.content_type,
-    )
-
-
-# ======================================================
-# 2️⃣ Save Evidence Metadata (AFTER upload)
+# 1️⃣ Upload Evidence (FILE + METADATA)
 # ======================================================
 
 @router.post("", response_model=dict)
-def create_evidence(
-    payload: EvidenceCreate,
+async def upload_evidence(
+    file: UploadFile = File(...),
+
+    entity_id: int = Form(...),
+    description: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
+    is_public: bool = Form(True),
+    is_anonymous: bool = Form(False),
+
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Stores metadata ONLY. No file bytes touch the API.
+    Fully backend-handled evidence upload.
     """
 
+    if not file:
+        raise HTTPException(status_code=400, detail="File required")
+
+    try:
+        # ✅ FIXED: correct argument name
+        blob_url = upload_file_to_b2(
+            file_obj=file.file,
+            original_filename=file.filename,
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
     evidence = Evidence(
-        blob_url=payload.blob_url,
-        description=payload.description,
-        tags=payload.tags,
-        location=payload.location,
-        is_public=payload.is_public,
-        is_anonymous=payload.is_anonymous,
-        entity_id=payload.entity_id,
-        user_id=None if payload.is_anonymous else current_user.id,
+        blob_url=blob_url,
+        description=description,
+        tags=tags,
+        location=location,
+        is_public=is_public,
+        is_anonymous=is_anonymous,
+        entity_id=entity_id,
+        user_id=None if is_anonymous else current_user.id,
     )
 
     db.add(evidence)
@@ -85,19 +69,11 @@ def create_evidence(
 
 
 # ======================================================
-# 3️⃣ Vault Feed (PUBLIC LANDING PAGE)
+# 2️⃣ Vault Feed (Public)
 # ======================================================
 
 @router.get("/feed")
-def vault_feed(
-    db: Session = Depends(get_db),
-    limit: int = 20,
-):
-    """
-    Public, scrolling Vault feed.
-    Ordered by relevance (v1 = newest first).
-    """
-
+def vault_feed(db: Session = Depends(get_db), limit: int = 20):
     evidence_items = (
         db.query(Evidence)
         .filter(Evidence.is_public == True)
@@ -128,14 +104,11 @@ def vault_feed(
 
 
 # ======================================================
-# 4️⃣ Single Evidence Detail
+# 3️⃣ Single Evidence Detail
 # ======================================================
 
 @router.get("/{evidence_id}")
-def get_evidence_detail(
-    evidence_id: int,
-    db: Session = Depends(get_db),
-):
+def get_evidence_detail(evidence_id: int, db: Session = Depends(get_db)):
     evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
 
     if not evidence or not evidence.is_public:

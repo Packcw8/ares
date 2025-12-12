@@ -1,0 +1,17 @@
+﻿[
+  {
+    "corsRuleName": "ares-browser-upload",
+    "allowedOrigins": [
+      "https://www.aresjustice.com",
+      "http://localhost:3000"
+    ],
+    "allowedOperations": [
+      "b2_upload_file",
+      "b2_upload_part",
+      "b2_upload_part_copy"
+    ],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["ETag"],
+    "maxAgeSeconds": 3600
+  }
+]
