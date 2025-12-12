@@ -1,52 +1,159 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
 from db import get_db
 from models.evidence import Evidence
-from schemas.evidence import EvidenceOut
-from utils.blob_utils import upload_file_to_azure
-from utils.auth import get_current_user
 from models.user import User
-import traceback
+from utils.auth import get_current_user
+from utils.blob_utils import generate_presigned_upload
 
 router = APIRouter(prefix="/vault", tags=["evidence"])
 
-@router.post("/upload", response_model=EvidenceOut)
-async def upload_evidence(
-    file: UploadFile = File(...),
-    description: str = Form(...),
-    tags: str = Form(""),
-    location: str = Form(""),
-    is_public: bool = Form(True),
-    is_anonymous: bool = Form(False),
-    entity_id: int = Form(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+# ======================================================
+# Schemas (local to keep this file self-contained)
+# ======================================================
+
+class UploadURLRequest(BaseModel):
+    filename: str
+    content_type: str
+
+
+class EvidenceCreate(BaseModel):
+    blob_url: str
+    description: str | None = None
+    tags: str | None = None
+    location: str | None = None
+    is_public: bool = True
+    is_anonymous: bool = False
+    entity_id: int
+
+
+# ======================================================
+# 1️⃣ Generate Backblaze Upload URL
+# ======================================================
+
+@router.post("/upload-url")
+def get_upload_url(
+    payload: UploadURLRequest,
+    current_user: User = Depends(get_current_user),
 ):
-    try:
-        blob_url = await upload_file_to_azure(file)
+    """
+    Returns a presigned Backblaze upload URL.
+    Frontend uploads the file directly to B2.
+    """
+    return generate_presigned_upload(
+        filename=payload.filename,
+        content_type=payload.content_type,
+    )
 
-        evidence = Evidence(
-            blob_url=blob_url,
-            description=description,
-            tags=tags,
-            location=location,
-            is_public=is_public,
-            is_anonymous=is_anonymous,
-            entity_id=entity_id,
-            user_id=None if is_anonymous else current_user.id
-        )
 
-        db.add(evidence)
-        db.commit()
-        db.refresh(evidence)
+# ======================================================
+# 2️⃣ Save Evidence Metadata (AFTER upload)
+# ======================================================
 
-        return evidence
+@router.post("", response_model=dict)
+def create_evidence(
+    payload: EvidenceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stores metadata ONLY. No file bytes touch the API.
+    """
 
-    except Exception as e:
-        print("[ERROR] Upload route failed")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Evidence upload failed.")
+    evidence = Evidence(
+        blob_url=payload.blob_url,
+        description=payload.description,
+        tags=payload.tags,
+        location=payload.location,
+        is_public=payload.is_public,
+        is_anonymous=payload.is_anonymous,
+        entity_id=payload.entity_id,
+        user_id=None if payload.is_anonymous else current_user.id,
+    )
 
-@router.get("/public", response_model=list[EvidenceOut])
-def list_public_evidence(db: Session = Depends(get_db)):
-    return db.query(Evidence).filter(Evidence.is_public == True).order_by(Evidence.timestamp.desc()).all()
+    db.add(evidence)
+    db.commit()
+    db.refresh(evidence)
+
+    return {
+        "id": evidence.id,
+        "blob_url": evidence.blob_url,
+        "created_at": evidence.timestamp,
+    }
+
+
+# ======================================================
+# 3️⃣ Vault Feed (PUBLIC LANDING PAGE)
+# ======================================================
+
+@router.get("/feed")
+def vault_feed(
+    db: Session = Depends(get_db),
+    limit: int = 20,
+):
+    """
+    Public, scrolling Vault feed.
+    Ordered by relevance (v1 = newest first).
+    """
+
+    evidence_items = (
+        db.query(Evidence)
+        .filter(Evidence.is_public == True)
+        .order_by(Evidence.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "id": e.id,
+            "media_url": e.blob_url,
+            "description": e.description,
+            "tags": e.tags,
+            "location": e.location,
+            "created_at": e.timestamp,
+            "is_anonymous": e.is_anonymous,
+            "entity": {
+                "id": e.entity.id,
+                "name": e.entity.name,
+                "type": e.entity.type,
+                "state": e.entity.state,
+                "county": e.entity.county,
+            },
+        }
+        for e in evidence_items
+    ]
+
+
+# ======================================================
+# 4️⃣ Single Evidence Detail
+# ======================================================
+
+@router.get("/{evidence_id}")
+def get_evidence_detail(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+):
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence or not evidence.is_public:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+
+    return {
+        "id": evidence.id,
+        "media_url": evidence.blob_url,
+        "description": evidence.description,
+        "tags": evidence.tags,
+        "location": evidence.location,
+        "created_at": evidence.timestamp,
+        "is_anonymous": evidence.is_anonymous,
+        "entity": {
+            "id": evidence.entity.id,
+            "name": evidence.entity.name,
+            "type": evidence.entity.type,
+            "state": evidence.entity.state,
+            "county": evidence.entity.county,
+        },
+    }
