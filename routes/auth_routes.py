@@ -169,19 +169,24 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = authenticate_user(db, user.email, user.password)
-    if not db_user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    db_user = authenticate_user(db, user.identifier, user.password)
 
-    if REQUIRE_VERIFIED_EMAIL_ON_LOGIN and not db_user.is_email_verified:
-        raise HTTPException(status_code=403, detail="Please verify your email before logging in")
+    if not db_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username/email or password"
+        )
 
     access_token = create_access_token(data={
         "sub": str(db_user.id),
         "role": db_user.role
     })
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
 
 # ======================================================
 # Current user

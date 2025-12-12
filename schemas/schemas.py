@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     }
 
 
+# 🔐 LOGIN: username OR email
 class UserLogin(BaseModel):
-    email: EmailStr
+    identifier: str  # email OR username
     password: str

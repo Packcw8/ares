@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from models.user import User
 from db import get_db
@@ -44,11 +45,31 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 # -------------------------------
 # Authenticate User (Login)
+# username OR email + verified email required
 # -------------------------------
-def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
+def authenticate_user(db: Session, identifier: str, password: str) -> Optional[User]:
+    identifier = identifier.lower().strip()
+
+    user = db.query(User).filter(
+        or_(
+            User.email == identifier,
+            User.username == identifier
+        )
+    ).first()
+
+    if not user:
         return None
+
+    if not verify_password(password, user.hashed_password):
+        return None
+
+    # 🔒 HARD REQUIREMENT: email must be verified
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in"
+        )
+
     return user
 
 # -------------------------------
@@ -66,7 +87,7 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = int(payload.get("sub"))  # ✅ convert to int
+        user_id = int(payload.get("sub"))
         if user_id is None:
             raise credentials_exception
     except (JWTError, ValueError):
@@ -75,6 +96,7 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
+
     return user
 
 # -------------------------------
