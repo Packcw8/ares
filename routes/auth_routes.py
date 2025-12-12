@@ -119,16 +119,32 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    is_verified = False if user.role == "official" else True
     raw_token, token_hash, expires_at = make_verify_token()
+
+    # 🔒 FORCE ROLE LOGIC (DO NOT TRUST CLIENT)
+    if user.role == "official":
+        role = "official_pending"
+        is_verified = False
+    else:
+        role = "citizen"
+        is_verified = True
 
     new_user = User(
         username=username,
         email=email,
         hashed_password=hash_password(user.password),
-        role=user.role,
+        role=role,
         is_verified=is_verified,
         is_email_verified=False,
+
+        # Official metadata (safe even for citizens — NULL)
+        full_name=user.full_name,
+        title=user.title,
+        agency=user.agency,
+        official_email=user.official_email,
+        state=user.state,
+        jurisdiction=user.jurisdiction,
+
         email_verification_token_hash=token_hash,
         email_verification_expires_at=expires_at,
         email_verified_at=None,
@@ -140,6 +156,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     send_verification_email(new_user.email, raw_token)
     return new_user
+
 
 # ======================================================
 # Login (username OR email)
