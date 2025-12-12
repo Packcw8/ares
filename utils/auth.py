@@ -7,13 +7,13 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from models.user import User
 from db import get_db
 
 # -------------------------------
-# Config (use Azure env vars)
+# Config
 # -------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "your_fallback_dev_key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
@@ -44,16 +44,16 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # -------------------------------
-# Authenticate User (Login)
-# username OR email + verified email required
+# Authenticate User
+# (EMAIL OR USERNAME — CASE INSENSITIVE)
 # -------------------------------
 def authenticate_user(db: Session, identifier: str, password: str) -> Optional[User]:
     identifier = identifier.lower().strip()
 
     user = db.query(User).filter(
         or_(
-            User.email == identifier,
-            User.username == identifier
+            func.lower(User.email) == identifier,
+            func.lower(User.username) == identifier
         )
     ).first()
 
@@ -63,7 +63,6 @@ def authenticate_user(db: Session, identifier: str, password: str) -> Optional[U
     if not verify_password(password, user.hashed_password):
         return None
 
-    # 🔒 HARD REQUIREMENT: email must be verified
     if not user.is_email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
