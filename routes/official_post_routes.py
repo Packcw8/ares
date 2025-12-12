@@ -9,14 +9,15 @@ from utils.auth import get_current_user
 router = APIRouter(prefix="/forum", tags=["official_posts"])
 
 
-# ✅ Create a post (official or admin only)
+# ✅ Create a post (official_verified or admin only)
 @router.post("/create", response_model=OfficialPostOut)
 def create_post(
     post: OfficialPostCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ("official", "admin"):  # ✅ FIXED LINE
+    # ✅ FIX: allow official_verified (matches your User.role design)
+    if current_user.role not in ("official_verified", "admin"):
         raise HTTPException(status_code=403, detail="Only officials can post")
 
     new_post = OfficialPost(
