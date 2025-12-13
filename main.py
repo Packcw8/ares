@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uvicorn
@@ -16,42 +16,44 @@ from routes.admin_routes import router as admin_router
 from routes import evidence
 
 # Import all models so SQLAlchemy registers tables
-import models   # <-- this loads user, rating, evidence, official_post, post_comment models
+import models
 
-# Initialize FastAPI app
+# ======================================================
+# FASTAPI APP (SINGLE INSTANCE)
+# ======================================================
 app = FastAPI(
     title="ARES API",
     version="0.1.0"
 )
 
-# CORS setup
-origins = [
-    "http://localhost:3000",
-    "https://ashy-tree-0ea272d0f.6.azurestaticapps.net",
-    "https://www.aresjustice.com",
-    "https://aresjustice.com",
-]
-
+# ======================================================
+# CORS (THIS IS ALL YOU NEED)
+# ======================================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "https://www.aresjustice.com",
+        "https://aresjustice.com",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create all tables on startup
+# ======================================================
+# STARTUP
+# ======================================================
 @app.on_event("startup")
 def create_tables():
     print("🔧 Creating database tables (if missing)...")
     Base.metadata.create_all(bind=engine)
     print("✅ Tables ready!")
 
-
-# -------------------
+# ======================================================
 # ROUTES
-# -------------------
-
+# ======================================================
 app.include_router(auth_router)
 app.include_router(rating_router)
 app.include_router(official_post_router)
@@ -59,40 +61,20 @@ app.include_router(post_comment_router)
 app.include_router(admin_router)
 app.include_router(evidence.router)
 
-
+# Optional forum trailing-slash fix
 @app.get("/forum", include_in_schema=False)
 async def forum_redirect(request: Request):
     return RedirectResponse(url=str(request.url) + "/")
 
+# ======================================================
+# HEALTH CHECK (USE THIS TO VERIFY DEPLOY)
+# ======================================================
+@app.get("/__health")
+def health():
+    return {"status": "ok", "cors": "enabled"}
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-
-@app.get("/debug-db")
-def debug_db():
-    return {"DATABASE_URL": os.getenv("DATABASE_URL")}
-
-
-# Manual OPTIONS handler (Azure compatibility)
-@app.options("/{rest_of_path:path}")
-async def preflight_handler(request: Request, rest_of_path: str):
-    origin = request.headers.get("origin")
-    headers = {
-        "Access-Control-Allow-Origin": origin if origin in origins else "*",
-        "Access-Control-Allow-Methods": "POST, GET, OPTIONS, DELETE, PATCH",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    }
-    return JSONResponse(content={"message": "CORS preflight OK"}, headers=headers)
-
-
-@app.get("/_version")
-def version_check():
-    return {"version": "manual-options-handler-active"}
-
-
-# Local development entry point
+# ======================================================
+# LOCAL DEV ENTRY
+# ======================================================
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, proxy_headers=True)
-
