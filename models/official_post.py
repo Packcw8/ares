@@ -1,10 +1,8 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from sqlalchemy.dialects.postgresql import ARRAY
 from db import Base
-from models.post_comment import PostComment
-from sqlalchemy import ARRAY
-
 
 class OfficialPost(Base):
     __tablename__ = "official_posts"
@@ -16,13 +14,20 @@ class OfficialPost(Base):
     title = Column(String, nullable=False)
     body = Column(Text, nullable=False)
     verified = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    from sqlalchemy import ARRAY
+
+    # Store in UTC, timezone-aware
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     # New fields
     is_pinned = Column(Boolean, default=False)
     is_ama = Column(Boolean, default=False)
-    tags = Column(ARRAY(String), default=[])
+
+    # IMPORTANT: use default=list, not default=[]
+    tags = Column(ARRAY(String), default=list)
 
     author = relationship("User")
     entity = relationship("RatedEntity")

@@ -1,6 +1,6 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from db import Base
 
 class PostComment(Base):
@@ -11,7 +11,13 @@ class PostComment(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
 
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Store in UTC, timezone-aware
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     post = relationship("OfficialPost", back_populates="comments")
     user = relationship("User")

@@ -1,6 +1,6 @@
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from db import Base
 
 class Evidence(Base):
@@ -13,7 +13,13 @@ class Evidence(Base):
     location = Column(String)
     is_public = Column(Boolean, default=False)
     is_anonymous = Column(Boolean, default=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Store in UTC, timezone-aware
+    timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     # 🔗 Foreign keys
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
