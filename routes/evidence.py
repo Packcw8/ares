@@ -73,7 +73,10 @@ def vault_feed(
 ):
     evidence_items = (
         db.query(Evidence)
-        .options(joinedload(Evidence.user))
+        .options(
+            joinedload(Evidence.user),
+            joinedload(Evidence.entity),  # ✅ THIS IS THE FIX
+        )
         .filter(Evidence.is_public == True)
         .order_by(Evidence.timestamp.desc())
         .limit(limit)
