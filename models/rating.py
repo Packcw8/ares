@@ -41,6 +41,7 @@ class RatingCategoryScore(Base):
     __tablename__ = "rating_scores"
 
     id = Column(Integer, primary_key=True, index=True)
+
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     entity_id = Column(Integer, ForeignKey("rated_entities.id"), nullable=False)
 
@@ -64,6 +65,8 @@ class RatingCategoryScore(Base):
         nullable=False
     )
 
+    # ✅ ADD THESE TWO RELATIONSHIPS
+    user = relationship("User", foreign_keys=[user_id])
     entity = relationship("RatedEntity", back_populates="ratings")
 
 
