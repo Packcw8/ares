@@ -2,12 +2,12 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from schemas.user_public import PublicUserOut
+from schemas.rating_schemas import RatedEntityOut
 
 
 # ======================================================
 # Evidence creation (metadata only)
 # ======================================================
-
 class EvidenceCreate(BaseModel):
     blob_url: str
     description: Optional[str] = None
@@ -21,18 +21,13 @@ class EvidenceCreate(BaseModel):
 # ======================================================
 # Evidence output (DB → API)
 # ======================================================
-
 class EvidenceOut(EvidenceCreate):
     id: int
     timestamp: datetime
-#=============================================================
-#public User
-#=============================================================
+
+    # ✅ THESE MUST BE TOP-LEVEL FIELDS
+    user: Optional[PublicUserOut]
+    entity: Optional[RatedEntityOut]
+
     class Config:
-        # ✅ Pydantic v2 replacement for orm_mode
-
         from_attributes = True
-
-        user: Optional[PublicUserOut]
-
-        model_config = {"from_attributes": True}
