@@ -20,7 +20,9 @@ from schemas.rating_schemas import (
 router = APIRouter(prefix="/ratings", tags=["ratings"])
 
 
-# ---------- Recalculate reputation ----------
+# ======================================================
+# Recalculate reputation (authoritative)
+# ======================================================
 def recalculate_reputation(entity_id: int, db: Session) -> float:
     scores = (
         db.query(RatingCategoryScore)
@@ -31,7 +33,7 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
     if not scores:
         return 100.0
 
-    total = 0
+    total = 0.0
     for s in scores:
         avg = (
             s.accountability
@@ -47,7 +49,9 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
     return max(0.0, 100.0 + total)
 
 
-# ---------- Create Rated Entity ----------
+# ======================================================
+# Create Rated Entity
+# ======================================================
 @router.post("/entities", response_model=RatedEntityOut)
 def create_entity(
     entity: RatedEntityCreate,
@@ -74,7 +78,9 @@ def create_entity(
     return new_entity
 
 
-# ---------- Get Entities ----------
+# ======================================================
+# List Entities
+# ======================================================
 @router.get("/entities", response_model=List[RatedEntityOut])
 def list_entities(
     db: Session = Depends(get_db),
@@ -100,13 +106,62 @@ def list_entities(
     return query.all()
 
 
-# ---------- Submit Rating ----------
+# ======================================================
+# Submit OR Update Rating (ONE per user per entity)
+# ======================================================
 @router.post("/submit", response_model=RatingCategoryScoreOut)
-def submit_rating(
+def submit_or_update_rating(
     rating: RatingCategoryScoreCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    existing = (
+        db.query(RatingCategoryScore)
+        .filter(
+            RatingCategoryScore.user_id == current_user.id,
+            RatingCategoryScore.entity_id == rating.entity_id,
+        )
+        .first()
+    )
+
+    # -----------------------------
+    # UPDATE EXISTING RATING
+    # -----------------------------
+    if existing:
+        existing.accountability = rating.accountability
+        existing.respect = rating.respect
+        existing.effectiveness = rating.effectiveness
+        existing.transparency = rating.transparency
+        existing.public_impact = rating.public_impact
+        existing.comment = rating.comment
+        existing.violated_rights = rating.violated_rights or []
+
+        # Reset trust state on update
+        existing.verified = False
+        existing.flagged = False
+        existing.flag_reason = None
+        existing.flagged_by = None
+
+        db.commit()
+
+        entity = db.query(RatedEntity).filter(
+            RatedEntity.id == rating.entity_id
+        ).first()
+
+        if entity:
+            entity.reputation_score = recalculate_reputation(entity.id, db)
+            db.commit()
+
+        return (
+            db.query(RatingCategoryScore)
+            .options(joinedload(RatingCategoryScore.user))
+            .filter(RatingCategoryScore.id == existing.id)
+            .first()
+        )
+
+    # -----------------------------
+    # CREATE FIRST RATING
+    # -----------------------------
     new_rating = RatingCategoryScore(
         user_id=current_user.id,
         entity_id=rating.entity_id,
@@ -121,27 +176,16 @@ def submit_rating(
     )
 
     db.add(new_rating)
+    db.commit()
 
     entity = db.query(RatedEntity).filter(
         RatedEntity.id == rating.entity_id
     ).first()
 
     if entity:
-        avg = (
-            rating.accountability
-            + rating.respect
-            + rating.effectiveness
-            + rating.transparency
-            + rating.public_impact
-        ) / 5
-        entity.reputation_score = max(
-            0.0, entity.reputation_score + (avg - 5) * 1.5
-        )
+        entity.reputation_score = recalculate_reputation(entity.id, db)
+        db.commit()
 
-    db.commit()
-    db.refresh(new_rating)
-
-    # 🔑 reload with user
     return (
         db.query(RatingCategoryScore)
         .options(joinedload(RatingCategoryScore.user))
@@ -150,13 +194,18 @@ def submit_rating(
     )
 
 
-# ---------- Verify Rating ----------
+# ======================================================
+# Verify Rating (Admin)
+# ======================================================
 @router.post("/verify-rating/{rating_id}", response_model=RatingCategoryScoreOut)
 def verify_rating(
     rating_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
     rating = db.query(RatingCategoryScore).filter(
         RatingCategoryScore.id == rating_id
     ).first()
@@ -169,23 +218,15 @@ def verify_rating(
     rating.flag_reason = None
     rating.flagged_by = None
 
+    db.commit()
+
     entity = db.query(RatedEntity).filter(
         RatedEntity.id == rating.entity_id
     ).first()
 
     if entity:
-        avg = (
-            rating.accountability
-            + rating.respect
-            + rating.effectiveness
-            + rating.transparency
-            + rating.public_impact
-        ) / 5
-        entity.reputation_score = max(
-            0.0, entity.reputation_score + (avg - 5) * 2.5
-        )
-
-    db.commit()
+        entity.reputation_score = recalculate_reputation(entity.id, db)
+        db.commit()
 
     return (
         db.query(RatingCategoryScore)
@@ -195,7 +236,9 @@ def verify_rating(
     )
 
 
-# ---------- Delete Rating ----------
+# ======================================================
+# Delete Rating
+# ======================================================
 @router.delete("/delete-rating/{rating_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_rating(
     rating_id: int,
@@ -209,7 +252,7 @@ def delete_rating(
     if not rating:
         raise HTTPException(status_code=404, detail="Rating not found")
 
-    if rating.user_id != current_user.id:
+    if rating.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
     entity_id = rating.entity_id
@@ -227,7 +270,9 @@ def delete_rating(
     return
 
 
-# ---------- Entity Reviews ----------
+# ======================================================
+# Entity Reviews
+# ======================================================
 @router.get(
     "/entity/{entity_id}/reviews",
     response_model=List[RatingCategoryScoreOut],
@@ -242,7 +287,9 @@ def get_entity_reviews(entity_id: int, db: Session = Depends(get_db)):
     )
 
 
-# ---------- Flag Rating ----------
+# ======================================================
+# Flag Rating
+# ======================================================
 @router.post("/flag-rating/{rating_id}")
 def flag_rating(
     rating_id: int,
@@ -265,7 +312,9 @@ def flag_rating(
     return {"message": "Rating flagged for admin review"}
 
 
-# ---------- Admin Views ----------
+# ======================================================
+# Admin Views
+# ======================================================
 @router.get("/admin/flagged-ratings", response_model=List[RatingCategoryScoreOut])
 def get_flagged_ratings(
     db: Session = Depends(get_db),
@@ -296,3 +345,31 @@ def get_unverified_ratings(
         .filter(RatingCategoryScore.verified == False)
         .all()
     )
+
+
+# ======================================================
+# Get Current User's Rating for an Entity
+# ======================================================
+@router.get("/mine", response_model=RatingCategoryScoreOut)
+def get_my_rating_for_entity(
+    entity_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rating = (
+        db.query(RatingCategoryScore)
+        .options(joinedload(RatingCategoryScore.user))
+        .filter(
+            RatingCategoryScore.user_id == current_user.id,
+            RatingCategoryScore.entity_id == entity_id,
+        )
+        .first()
+    )
+
+    if not rating:
+        raise HTTPException(
+            status_code=404,
+            detail="No rating found for this user and entity",
+        )
+
+    return rating
