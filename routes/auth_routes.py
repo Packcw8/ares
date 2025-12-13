@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 from schemas.schemas import UserCreate, UserOut, UserLogin
 from models.user import User
+from models.password_reset import PasswordResetToken
 from db import get_db
 from utils.auth import (
     hash_password,
@@ -12,12 +13,12 @@ from utils.auth import (
     create_access_token,
     get_current_user,
 )
+from utils.email import send_verification_email, send_password_reset_email
 
 import os
 import secrets
 import hashlib
 from datetime import datetime, timedelta, timezone
-import requests
 from urllib.parse import urlencode
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -26,8 +27,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # Config
 # ======================================================
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "onboarding@resend.dev")
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 # ======================================================
 # Email verification helpers
@@ -47,47 +46,6 @@ def build_verify_link(email: str, token: str) -> str:
     qs = urlencode({"email": email, "token": token})
     return f"{FRONTEND_URL}/verify-email?{qs}"
 
-def send_verification_email(to_email: str, token: str) -> None:
-    verify_link = build_verify_link(to_email, token)
-
-    if not RESEND_API_KEY:
-        print("[WARN] RESEND_API_KEY not set; skipping email send")
-        print(f"[DEV] Verify link: {verify_link}")
-        return
-
-    payload = {
-        "from": FROM_EMAIL,
-        "to": [to_email],
-        "subject": "Verify your email for ARES",
-        "html": f"""
-        <div style="font-family:Arial,sans-serif;line-height:1.5">
-          <h2>Verify your email</h2>
-          <p>Please verify your email to activate your ARES account.</p>
-          <p>
-            <a href="{verify_link}"
-               style="display:inline-block;padding:10px 16px;background:#1c2b4a;color:white;text-decoration:none;border-radius:6px;">
-              Verify Email
-            </a>
-          </p>
-          <p>If the button doesn’t work, copy and paste this link:</p>
-          <p>{verify_link}</p>
-        </div>
-        """
-    }
-
-    r = requests.post(
-        "https://api.resend.com/emails",
-        headers={
-            "Authorization": f"Bearer {RESEND_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=20,
-    )
-
-    if r.status_code >= 400:
-        print(f"[ERROR] Resend failed: {r.status_code} {r.text}")
-
 # ======================================================
 # CORS preflight
 # ======================================================
@@ -98,7 +56,7 @@ async def signup_options(request: Request):
         "Access-Control-Allow-Origin": origin if origin in [
             "https://www.aresjustice.com",
             "https://aresjustice.com",
-            "http://localhost:3000"
+            "http://localhost:3000",
         ] else "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Authorization, Content-Type",
@@ -121,7 +79,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     raw_token, token_hash, expires_at = make_verify_token()
 
-    # 🔒 FORCE ROLE LOGIC (DO NOT TRUST CLIENT)
     if user.role == "official":
         role = "official_pending"
         is_verified = False
@@ -137,7 +94,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         is_verified=is_verified,
         is_email_verified=False,
 
-        # Official metadata (safe even for citizens — NULL)
         full_name=user.full_name,
         title=user.title,
         agency=user.agency,
@@ -157,7 +113,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     send_verification_email(new_user.email, raw_token)
     return new_user
 
-
 # ======================================================
 # Login (username OR email)
 # ======================================================
@@ -168,7 +123,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not db_user:
         raise HTTPException(
             status_code=401,
-            detail="Invalid username/email or password"
+            detail="Invalid username/email or password",
         )
 
     access_token = create_access_token(
@@ -176,6 +131,127 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+# ======================================================
+# Forgot Password (Recovery)
+# ======================================================
+class ForgotPasswordPayload(BaseModel):
+    identifier: str
+
+@router.post("/forgot-password", status_code=200)
+def forgot_password(
+    payload: ForgotPasswordPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Accepts email OR username.
+    Always returns success to prevent account enumeration.
+    """
+
+    identifier = payload.identifier.lower().strip()
+
+    user = (
+        db.query(User)
+        .filter(
+            (User.email == identifier) |
+            (User.username == identifier)
+        )
+        .first()
+    )
+
+    response = {
+        "message": "If an account exists, a reset link has been sent."
+    }
+
+    if not user:
+        return response
+
+    # Invalidate any previous unused tokens
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,
+    ).delete()
+
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        used=False,
+    )
+
+    db.add(reset_token)
+    db.commit()
+
+    send_password_reset_email(
+        to_email=user.email,
+        token=raw_token,
+    )
+
+    return response
+# ======================================================
+# Reset Password (Final Step)
+# ======================================================
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password", status_code=200)
+def reset_password(
+    payload: ResetPasswordPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Resets a user's password using a one-time token.
+    """
+
+    token_hash = hashlib.sha256(payload.token.encode("utf-8")).hexdigest()
+
+    reset_token = (
+        db.query(PasswordResetToken)
+        .filter(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used == False,
+        )
+        .first()
+    )
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset link",
+        )
+
+    if datetime.now(timezone.utc) > reset_token.expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Reset link has expired",
+        )
+
+    user = db.query(User).filter(User.id == reset_token.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset request",
+        )
+
+    # 🔒 Update password
+    user.hashed_password = hash_password(payload.new_password)
+
+    # 🔒 Invalidate token immediately
+    reset_token.used = True
+    reset_token.used_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    return {
+        "message": "Password reset successful. You may now log in."
+    }
+
 
 # ======================================================
 # Current user
@@ -224,8 +300,14 @@ class ResendVerificationPayload(BaseModel):
     email: EmailStr
 
 @router.post("/resend-verification")
-def resend_verification(payload: ResendVerificationPayload, db: Session = Depends(get_db)):
-    response = {"ok": True, "message": "If the email exists, a verification link was sent"}
+def resend_verification(
+    payload: ResendVerificationPayload,
+    db: Session = Depends(get_db),
+):
+    response = {
+        "ok": True,
+        "message": "If the email exists, a verification link was sent",
+    }
 
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if not user or user.is_email_verified:
