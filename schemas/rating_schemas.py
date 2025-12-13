@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
+from schemas.user_public import PublicUserOut
 
 
 
@@ -39,7 +40,10 @@ class RatingCategoryScoreOut(RatingCategoryScoreCreate):
     id: int
     verified: bool
     created_at: datetime
-    user_id: int
+
+    # 👤 REPLACE user_id with user
+    user: PublicUserOut
+
     flagged: Optional[bool] = False
     flag_reason: Optional[str] = None
     flagged_by: Optional[int] = None

@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from sqlalchemy.orm import Session
-from typing import Optional
+from sqlalchemy.orm import Session, joinedload
+from typing import Optional, List
 
 from db import get_db
 from models.evidence import Evidence
 from models.user import User
 from utils.auth import get_current_user
 from utils.blob_utils import upload_file_to_b2
+from schemas.evidence import EvidenceOut
 
 router = APIRouter(prefix="/vault", tags=["evidence"])
 
@@ -65,63 +66,42 @@ async def upload_evidence(
 # ======================================================
 # 2️⃣ Vault Feed (PUBLIC READ)
 # ======================================================
-@router.get("/feed")
-def vault_feed(db: Session = Depends(get_db), limit: int = 20):
+@router.get("/feed", response_model=List[EvidenceOut])
+def vault_feed(
+    db: Session = Depends(get_db),
+    limit: int = 20,
+):
     evidence_items = (
         db.query(Evidence)
+        .options(joinedload(Evidence.user))
         .filter(Evidence.is_public == True)
         .order_by(Evidence.timestamp.desc())
         .limit(limit)
         .all()
     )
 
-    return [
-        {
-            "id": e.id,
-            "media_url": e.blob_url,
-            "description": e.description,
-            "tags": e.tags,
-            "location": e.location,
-            "created_at": e.timestamp,
-            "is_anonymous": e.is_anonymous,
-            "entity": {
-                "id": e.entity.id,
-                "name": e.entity.name,
-                "type": e.entity.type,
-                "state": e.entity.state,
-                "county": e.entity.county,
-            },
-        }
-        for e in evidence_items
-    ]
+    return evidence_items
 
 
 # ======================================================
 # 3️⃣ Single Evidence Detail (PUBLIC READ)
 # ======================================================
-@router.get("/{evidence_id}")
-def get_evidence_detail(evidence_id: int, db: Session = Depends(get_db)):
-    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+@router.get("/{evidence_id}", response_model=EvidenceOut)
+def get_evidence_detail(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+):
+    evidence = (
+        db.query(Evidence)
+        .options(joinedload(Evidence.user))
+        .filter(Evidence.id == evidence_id)
+        .first()
+    )
 
     if not evidence or not evidence.is_public:
         raise HTTPException(status_code=404, detail="Evidence not found")
 
-    return {
-        "id": evidence.id,
-        "media_url": evidence.blob_url,
-        "description": evidence.description,
-        "tags": evidence.tags,
-        "location": evidence.location,
-        "created_at": evidence.timestamp,
-        "is_anonymous": evidence.is_anonymous,
-        "entity": {
-            "id": evidence.entity.id,
-            "name": evidence.entity.name,
-            "type": evidence.entity.type,
-            "state": evidence.entity.state,
-            "county": evidence.entity.county,
-        },
-    }
+    return evidence
 
 
 # ======================================================

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from schemas.user_public import PublicUserOut
 
 
 # ======================================================
@@ -24,7 +25,14 @@ class EvidenceCreate(BaseModel):
 class EvidenceOut(EvidenceCreate):
     id: int
     timestamp: datetime
-
+#=============================================================
+#public User
+#=============================================================
     class Config:
         # ✅ Pydantic v2 replacement for orm_mode
+
         from_attributes = True
+
+        user: Optional[PublicUserOut]
+
+        model_config = {"from_attributes": True}
