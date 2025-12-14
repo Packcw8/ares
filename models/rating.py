@@ -4,7 +4,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from db import Base
 
-# ---------- Rated Entity ----------
+
+# ======================================================
+# Rated Entity
+# ======================================================
 class RatedEntity(Base):
     __tablename__ = "rated_entities"
 
@@ -15,7 +18,13 @@ class RatedEntity(Base):
     jurisdiction = Column(String)
     state = Column(String, nullable=False, index=True)
     county = Column(String, nullable=False, index=True)
+
     reputation_score = Column(Float, default=100.0)
+
+    # 🔒 Moderation / Approval
+    approval_status = Column(String, nullable=False, default="under_review")
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),
@@ -36,7 +45,9 @@ class RatedEntity(Base):
     )
 
 
-# ---------- Category-Based Score ----------
+# ======================================================
+# Category-Based Rating Score
+# ======================================================
 class RatingCategoryScore(Base):
     __tablename__ = "rating_scores"
 
@@ -65,12 +76,14 @@ class RatingCategoryScore(Base):
         nullable=False
     )
 
-    # ✅ ADD THESE TWO RELATIONSHIPS
+    # Relationships
     user = relationship("User", foreign_keys=[user_id])
     entity = relationship("RatedEntity", back_populates="ratings")
 
 
-# ---------- Evidence Attachments ----------
+# ======================================================
+# Evidence Attachments (linked to RatedEntity)
+# ======================================================
 class EvidenceAttachment(Base):
     __tablename__ = "evidence_attachments"
 

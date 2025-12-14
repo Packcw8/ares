@@ -4,6 +4,7 @@ from typing import Optional, List
 
 from db import get_db
 from models.evidence import Evidence
+from models.rating import RatedEntity
 from models.user import User
 from utils.auth import get_current_user
 from utils.blob_utils import upload_file_to_b2
@@ -14,23 +15,38 @@ router = APIRouter(prefix="/vault", tags=["evidence"])
 
 # ======================================================
 # 1️⃣ Upload Evidence (LOGIN REQUIRED)
+# 🔒 Only allowed for APPROVED entities
 # ======================================================
 @router.post("", response_model=dict)
 async def upload_evidence(
     file: UploadFile = File(...),
-
     entity_id: int = Form(...),
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     location: Optional[str] = Form(None),
     is_public: bool = Form(True),
     is_anonymous: bool = Form(False),
-
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not file:
         raise HTTPException(status_code=400, detail="File required")
+
+    # 🔒 Entity must be approved
+    entity = (
+        db.query(RatedEntity)
+        .filter(
+            RatedEntity.id == entity_id,
+            RatedEntity.approval_status == "approved",
+        )
+        .first()
+    )
+
+    if not entity:
+        raise HTTPException(
+            status_code=400,
+            detail="This entity is pending review and cannot receive evidence yet.",
+        )
 
     try:
         blob_url = upload_file_to_b2(
@@ -65,6 +81,7 @@ async def upload_evidence(
 
 # ======================================================
 # 2️⃣ Vault Feed (PUBLIC READ)
+# 🔒 Only evidence from APPROVED entities
 # ======================================================
 @router.get("/feed", response_model=List[EvidenceOut])
 def vault_feed(
@@ -75,9 +92,12 @@ def vault_feed(
         db.query(Evidence)
         .options(
             joinedload(Evidence.user),
-            joinedload(Evidence.entity),  # ✅ THIS IS THE FIX
+            joinedload(Evidence.entity),
         )
-        .filter(Evidence.is_public == True)
+        .filter(
+            Evidence.is_public == True,
+            Evidence.entity.has(approval_status="approved"),
+        )
         .order_by(Evidence.timestamp.desc())
         .limit(limit)
         .all()
@@ -88,6 +108,7 @@ def vault_feed(
 
 # ======================================================
 # 3️⃣ Single Evidence Detail (PUBLIC READ)
+# 🔒 Must belong to approved entity
 # ======================================================
 @router.get("/{evidence_id}", response_model=EvidenceOut)
 def get_evidence_detail(
@@ -96,12 +117,19 @@ def get_evidence_detail(
 ):
     evidence = (
         db.query(Evidence)
-        .options(joinedload(Evidence.user))
-        .filter(Evidence.id == evidence_id)
+        .options(
+            joinedload(Evidence.user),
+            joinedload(Evidence.entity),
+        )
+        .filter(
+            Evidence.id == evidence_id,
+            Evidence.is_public == True,
+            Evidence.entity.has(approval_status="approved"),
+        )
         .first()
     )
 
-    if not evidence or not evidence.is_public:
+    if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found")
 
     return evidence
@@ -128,7 +156,7 @@ def delete_evidence(
             detail="Anonymous evidence cannot be deleted by users",
         )
 
-    if evidence.user_id != current_user.id:
+    if evidence.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(
             status_code=403,
             detail="Not authorized to delete this evidence",

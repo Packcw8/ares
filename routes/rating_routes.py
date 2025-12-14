@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import List
+from datetime import datetime, timezone
 
 from db import get_db
 from models.rating import RatedEntity, RatingCategoryScore, EvidenceAttachment
@@ -51,6 +52,8 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
 
 # ======================================================
 # Create Rated Entity
+# - Admin: approved immediately
+# - Everyone else: under_review
 # ======================================================
 @router.post("/entities", response_model=RatedEntityOut)
 def create_entity(
@@ -71,7 +74,15 @@ def create_entity(
             detail="Entity already exists with same name, type, state, and county.",
         )
 
-    new_entity = RatedEntity(**entity.dict())
+    is_admin = current_user.role == "admin"
+
+    new_entity = RatedEntity(
+        **entity.dict(),
+        approval_status="approved" if is_admin else "under_review",
+        approved_by=current_user.id if is_admin else None,
+        approved_at=datetime.now(timezone.utc) if is_admin else None,
+    )
+
     db.add(new_entity)
     db.commit()
     db.refresh(new_entity)
@@ -79,7 +90,8 @@ def create_entity(
 
 
 # ======================================================
-# List Entities
+# List Entities (PUBLIC)
+# ✅ Only return approved entities
 # ======================================================
 @router.get("/entities", response_model=List[RatedEntityOut])
 def list_entities(
@@ -89,7 +101,9 @@ def list_entities(
     jurisdiction: str = Query(None),
     sort_by: str = Query("reputation_score"),
 ):
-    query = db.query(RatedEntity)
+    query = db.query(RatedEntity).filter(
+        RatedEntity.approval_status == "approved"
+    )
 
     if type:
         query = query.filter(RatedEntity.type == type)
@@ -108,6 +122,7 @@ def list_entities(
 
 # ======================================================
 # Submit OR Update Rating (ONE per user per entity)
+# ✅ Block rating if entity not approved
 # ======================================================
 @router.post("/submit", response_model=RatingCategoryScoreOut)
 def submit_or_update_rating(
@@ -115,6 +130,18 @@ def submit_or_update_rating(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # 🔒 Must be an approved entity to receive ratings
+    entity = db.query(RatedEntity).filter(
+        RatedEntity.id == rating.entity_id,
+        RatedEntity.approval_status == "approved",
+    ).first()
+
+    if not entity:
+        raise HTTPException(
+            status_code=400,
+            detail="This entity is pending review and cannot be rated yet.",
+        )
+
     existing = (
         db.query(RatingCategoryScore)
         .filter(
@@ -144,13 +171,9 @@ def submit_or_update_rating(
 
         db.commit()
 
-        entity = db.query(RatedEntity).filter(
-            RatedEntity.id == rating.entity_id
-        ).first()
-
-        if entity:
-            entity.reputation_score = recalculate_reputation(entity.id, db)
-            db.commit()
+        # entity is already loaded above and approved
+        entity.reputation_score = recalculate_reputation(entity.id, db)
+        db.commit()
 
         return (
             db.query(RatingCategoryScore)
@@ -178,13 +201,9 @@ def submit_or_update_rating(
     db.add(new_rating)
     db.commit()
 
-    entity = db.query(RatedEntity).filter(
-        RatedEntity.id == rating.entity_id
-    ).first()
-
-    if entity:
-        entity.reputation_score = recalculate_reputation(entity.id, db)
-        db.commit()
+    # entity is already loaded above and approved
+    entity.reputation_score = recalculate_reputation(entity.id, db)
+    db.commit()
 
     return (
         db.query(RatingCategoryScore)

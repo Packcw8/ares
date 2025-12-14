@@ -1,25 +1,31 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from sqlalchemy import func
+from datetime import datetime, timezone
+from typing import List
 
 from db import get_db
 from models.user import User
+from models.rating import RatedEntity, RatingCategoryScore
+from models.evidence import Evidence
 from utils.auth import get_current_user
+from schemas.rating_schemas import RatedEntityOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+# ======================================================
 # 🔐 Role-based dependency
+# ======================================================
 def require_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access only")
     return current_user
 
 
-# =========================
+# ======================================================
 # 👤 USER MANAGEMENT
-# =========================
-
+# ======================================================
 @router.get("/users")
 def list_users(
     db: Session = Depends(get_db),
@@ -54,11 +60,9 @@ def delete_user(
     return {"message": f"User {user.username} deleted successfully."}
 
 
-# =========================
+# ======================================================
 # 🏛️ OFFICIAL VERIFICATION
-# =========================
-
-# 📋 List pending officials
+# ======================================================
 @router.get("/officials/pending")
 def get_pending_officials(
     db: Session = Depends(get_db),
@@ -87,7 +91,6 @@ def get_pending_officials(
     ]
 
 
-# ✅ Verify an official
 @router.patch("/officials/{user_id}/verify")
 def verify_official(
     user_id: int,
@@ -107,7 +110,7 @@ def verify_official(
 
     user.role = "official_verified"
     user.is_verified = True
-    user.official_verified_at = datetime.utcnow()
+    user.official_verified_at = datetime.now(timezone.utc)
     user.verified_by_admin_id = admin_user.id
 
     db.commit()
@@ -119,12 +122,168 @@ def verify_official(
     }
 
 
-# =========================
-# 🔎 LEGACY ROUTES (REMOVED / UPDATED)
-# =========================
-# ❌ Removed:
-# - /verify-user/{id}      (expected role='official', no longer exists)
-# - /unverified-officials (expected role='official', replaced by official_pending)
-#
-# These routes could NEVER return data with the new role system
-# and would silently break admin verification.
+# ======================================================
+# 🏷️ ENTITY MODERATION
+# ======================================================
+@router.get("/entities/pending", response_model=List[RatedEntityOut])
+def get_pending_entities(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    return (
+        db.query(RatedEntity)
+        .filter(RatedEntity.approval_status == "under_review")
+        .order_by(RatedEntity.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/entities/{entity_id}/approve", response_model=RatedEntityOut)
+def approve_entity(
+    entity_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    entity = db.query(RatedEntity).filter(RatedEntity.id == entity_id).first()
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    entity.approval_status = "approved"
+    entity.approved_by = admin_user.id
+    entity.approved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(entity)
+    return entity
+
+
+@router.post("/entities/{entity_id}/reject", response_model=RatedEntityOut)
+def reject_entity(
+    entity_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    entity = db.query(RatedEntity).filter(RatedEntity.id == entity_id).first()
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    entity.approval_status = "rejected"
+    entity.approved_by = admin_user.id
+    entity.approved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(entity)
+    return entity
+
+
+# ======================================================
+# 📂 ALL EVIDENCE (ADMIN)
+# ======================================================
+@router.get("/evidence")
+def get_all_evidence(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Admin-only:
+    - List ALL evidence
+    - Regardless of flagged status
+    - Regardless of entity approval
+    """
+
+    evidence = (
+        db.query(Evidence)
+        .join(RatedEntity, Evidence.entity_id == RatedEntity.id)
+        .order_by(Evidence.timestamp.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": e.id,
+            "blob_url": e.blob_url,
+            "description": e.description,
+            "tags": e.tags,
+            "location": e.location,
+            "is_public": e.is_public,
+            "is_anonymous": e.is_anonymous,
+            "entity_id": e.entity_id,
+            "entity_name": e.entity.name if e.entity else None,
+            "entity_status": e.entity.approval_status if e.entity else None,
+            "created_at": e.timestamp,
+        }
+        for e in evidence
+    ]
+
+
+# ======================================================
+# 🗑️ DELETE ANY EVIDENCE (ADMIN)
+# ======================================================
+@router.delete("/evidence/{evidence_id}")
+def admin_delete_evidence(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Admin can delete ANY evidence:
+    - flagged or not
+    - public or private
+    - anonymous or user-owned
+    """
+
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+
+    db.delete(evidence)
+    db.commit()
+
+    return {"message": f"Evidence {evidence_id} deleted"}
+
+
+# ======================================================
+# 🔔 ADMIN DASHBOARD COUNTS
+# ======================================================
+@router.get("/counts")
+def admin_counts(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    pending_entities = (
+        db.query(func.count(RatedEntity.id))
+        .filter(RatedEntity.approval_status == "under_review")
+        .scalar()
+    )
+
+    flagged_ratings = (
+        db.query(func.count(RatingCategoryScore.id))
+        .filter(RatingCategoryScore.flagged == True)
+        .scalar()
+    )
+
+    unverified_ratings = (
+        db.query(func.count(RatingCategoryScore.id))
+        .filter(RatingCategoryScore.verified == False)
+        .scalar()
+    )
+
+    flagged_evidence = (
+        db.query(func.count(Evidence.id))
+        .join(RatedEntity, Evidence.entity_id == RatedEntity.id)
+        .filter(
+            (Evidence.is_public == True)
+            | (RatedEntity.approval_status == "rejected")
+        )
+        .scalar()
+    )
+
+    return {
+        "pending_entities": pending_entities or 0,
+        "flagged_ratings": flagged_ratings or 0,
+        "unverified_ratings": unverified_ratings or 0,
+        "flagged_evidence": flagged_evidence or 0,
+    }
