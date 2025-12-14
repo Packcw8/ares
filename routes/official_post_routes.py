@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
+
 from db import get_db
 from models.official_post import OfficialPost
 from models.user import User
 from utils.auth import get_current_user
+from schemas.official_post_schemas import OfficialPostCreate
 
 router = APIRouter(prefix="/forum", tags=["official_posts"])
 
@@ -11,9 +13,9 @@ router = APIRouter(prefix="/forum", tags=["official_posts"])
 # ✅ Create a post (official_verified or admin only)
 @router.post("/create")
 def create_post(
-    post,
+    post: OfficialPostCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     if current_user.role not in ("official_verified", "admin"):
         raise HTTPException(status_code=403, detail="Only officials can post")
@@ -26,7 +28,7 @@ def create_post(
         verified=True,
         is_pinned=post.is_pinned,
         is_ama=post.is_ama,
-        tags=post.tags
+        tags=post.tags,
     )
 
     db.add(new_post)
@@ -35,14 +37,14 @@ def create_post(
     return new_post
 
 
-# ✅ Get all posts (FORUM FEED — FIXED)
+# ✅ Get all posts (forum feed)
 @router.get("/")
 def list_posts(db: Session = Depends(get_db)):
     posts = (
         db.query(OfficialPost)
         .options(
             joinedload(OfficialPost.entity),
-            joinedload(OfficialPost.comments)
+            joinedload(OfficialPost.comments),
         )
         .order_by(OfficialPost.created_at.desc())
         .all()
@@ -57,7 +59,7 @@ def list_posts(db: Session = Depends(get_db)):
             "is_pinned": post.is_pinned,
             "is_ama": post.is_ama,
             "tags": post.tags,
-
+            "verified": post.verified,
             "entity": {
                 "id": post.entity.id,
                 "name": post.entity.name,
@@ -65,21 +67,20 @@ def list_posts(db: Session = Depends(get_db)):
                 "county": post.entity.county,
                 "type": post.entity.type,
             } if post.entity else None,
-
             "comment_count": len(post.comments),
         }
         for post in posts
     ]
 
 
-# ✅ Get single post (detail view — leave this simple)
+# ✅ Get single post
 @router.get("/{post_id}")
 def get_post(post_id: int, db: Session = Depends(get_db)):
     post = (
         db.query(OfficialPost)
         .options(
             joinedload(OfficialPost.entity),
-            joinedload(OfficialPost.comments)
+            joinedload(OfficialPost.comments),
         )
         .filter(OfficialPost.id == post_id)
         .first()
@@ -97,7 +98,6 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
         "is_ama": post.is_ama,
         "tags": post.tags,
         "verified": post.verified,
-
         "entity": {
             "id": post.entity.id,
             "name": post.entity.name,
@@ -105,7 +105,6 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
             "county": post.entity.county,
             "type": post.entity.type,
         } if post.entity else None,
-
         "comments": [
             {
                 "id": c.id,
