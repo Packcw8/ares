@@ -14,6 +14,7 @@ from routes.official_post_routes import router as official_post_router
 from routes.post_comment_routes import router as post_comment_router
 from routes.admin_routes import router as admin_router
 from routes import evidence
+from routes import vault_entries
 
 # Import all models so SQLAlchemy registers tables
 import models
@@ -60,6 +61,7 @@ app.include_router(official_post_router)
 app.include_router(post_comment_router)
 app.include_router(admin_router)
 app.include_router(evidence.router)
+app.include_router(vault_entries.router)
 
 # Optional forum trailing-slash fix
 @app.get("/forum", include_in_schema=False)
