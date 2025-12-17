@@ -46,3 +46,28 @@ def create_vault_entry(
         "created_at": entry.created_at,
         "is_public": entry.is_public,
     }
+@router.get("/mine", response_model=list[dict])
+def get_my_vault_entries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entries = (
+        db.query(VaultEntry)
+        .filter(VaultEntry.user_id == current_user.id)
+        .order_by(VaultEntry.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": e.id,
+            "testimony": e.testimony,
+            "entity_id": e.entity_id,
+            "location": e.location,
+            "category": e.category,
+            "is_public": e.is_public,
+            "created_at": e.created_at,
+            "published_at": e.published_at,
+        }
+        for e in entries
+    ]
