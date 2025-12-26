@@ -16,6 +16,7 @@ from routes.admin_routes import router as admin_router
 from routes import evidence
 from routes import vault_entries
 from routes import feed
+from routes import entities
 
 
 # Import all models so SQLAlchemy registers tables
@@ -65,6 +66,7 @@ app.include_router(admin_router)
 app.include_router(evidence.router)
 app.include_router(vault_entries.router)
 app.include_router(feed.router)
+app.include_router(entities.router)
 
 
 # Optional forum trailing-slash fix
