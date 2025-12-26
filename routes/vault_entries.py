@@ -10,7 +10,7 @@ from models.evidence import Evidence
 from models.user import User
 from utils.auth import get_current_user
 from schemas.evidence import EvidenceOut
-from schemas.vault_entry import VaultEntryCreate  # ✅ NEW
+from schemas.vault_entry import VaultEntryCreate, VaultEntryUpdate
 
 router = APIRouter(
     prefix="/vault-entries",
@@ -18,7 +18,7 @@ router = APIRouter(
 )
 
 # ======================================================
-# 1️⃣ CREATE VAULT ENTRY (JSON BODY – FIXED)
+# 1️⃣ CREATE VAULT ENTRY (JSON BODY)
 # ======================================================
 @router.post("", response_model=dict)
 def create_vault_entry(
@@ -182,13 +182,12 @@ def get_vault_entry_evidence(
     return evidence_items
 
 # ======================================================
-# 6️⃣ UPDATE VAULT ENTRY (STILL OLD – STEP 2 LATER)
+# 6️⃣ UPDATE VAULT ENTRY (JSON BODY – FIXED)
 # ======================================================
 @router.patch("/{entry_id}", response_model=dict)
 def update_vault_entry(
     entry_id: int,
-    testimony: str,
-    is_public: bool,
+    payload: VaultEntryUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -200,15 +199,19 @@ def update_vault_entry(
     if entry.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    entry.testimony = testimony.strip()
-    entry.is_public = is_public
-    entry.published_at = datetime.now(timezone.utc) if is_public else None
+    entry.testimony = payload.testimony.strip()
+    entry.entity_id = payload.entity_id
+    entry.is_public = payload.is_public
+    entry.published_at = (
+        datetime.now(timezone.utc) if payload.is_public else None
+    )
 
     db.commit()
 
     return {
         "id": entry.id,
         "is_public": entry.is_public,
+        "entity_id": entry.entity_id,
         "published_at": entry.published_at,
     }
 
