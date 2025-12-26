@@ -10,3 +10,7 @@ class VaultEntryCreate(BaseModel):
     category: Optional[str] = None
     is_anonymous: bool = False
     is_public: bool = False
+class VaultEntryUpdate(BaseModel):
+    testimony: str
+    entity_id: Optional[int] = None
+    is_public: bool
