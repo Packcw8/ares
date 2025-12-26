@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, List
@@ -187,3 +188,77 @@ def get_vault_entry_evidence(
     )
 
     return evidence_items
+# ======================================================
+# 6️⃣ UPDATE VAULT ENTRY (OWNER OR ADMIN)
+# ======================================================
+@router.patch("/{entry_id}", response_model=dict)
+def update_vault_entry(
+    entry_id: int,
+    testimony: str,
+    is_public: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entry = db.query(VaultEntry).filter(VaultEntry.id == entry_id).first()
+
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    if entry.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    entry.testimony = testimony.strip()
+    entry.is_public = is_public
+    entry.published_at = (
+        datetime.now(timezone.utc) if is_public else None
+    )
+
+    db.commit()
+
+    return {
+        "id": entry.id,
+        "is_public": entry.is_public,
+        "published_at": entry.published_at,
+    }
+# ======================================================
+# 7️⃣ DELETE VAULT ENTRY (ADMIN ONLY)
+# ======================================================
+@router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vault_entry_admin(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    entry = db.query(VaultEntry).filter(VaultEntry.id == entry_id).first()
+
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    # Delete attached evidence first (FK safety)
+    db.query(Evidence).filter(
+        Evidence.vault_entry_id == entry_id
+    ).delete()
+
+    db.delete(entry)
+    db.commit()
+    return
+@router.delete("/admin/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_evidence(
+    evidence_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+
+    db.delete(evidence)
+    db.commit()
+    return
