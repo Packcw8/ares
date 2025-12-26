@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from sqlalchemy import func
+from typing import Optional, List
 from datetime import datetime, timezone
 
 from db import get_db
 from models.vault_entry import VaultEntry
+from models.evidence import Evidence
 from models.user import User
 from utils.auth import get_current_user
+from schemas.evidence import EvidenceOut
 
 router = APIRouter(
     prefix="/vault-entries",
@@ -56,6 +59,7 @@ def create_vault_entry(
 
 # ======================================================
 # 2️⃣ USER PROFILE – VIEW OWN ENTRIES (PRIVATE + PUBLIC)
+#    NOW INCLUDES: evidence_count
 # ======================================================
 @router.get("/mine", response_model=list[dict])
 def get_my_vault_entries(
@@ -69,6 +73,18 @@ def get_my_vault_entries(
         .all()
     )
 
+    entry_ids = [e.id for e in entries]
+    evidence_counts = {}
+
+    if entry_ids:
+        rows = (
+            db.query(Evidence.vault_entry_id, func.count(Evidence.id))
+            .filter(Evidence.vault_entry_id.in_(entry_ids))
+            .group_by(Evidence.vault_entry_id)
+            .all()
+        )
+        evidence_counts = {vault_entry_id: count for vault_entry_id, count in rows}
+
     return [
         {
             "id": e.id,
@@ -77,8 +93,10 @@ def get_my_vault_entries(
             "location": e.location,
             "category": e.category,
             "is_public": e.is_public,
+            "is_anonymous": e.is_anonymous,
             "created_at": e.created_at,
             "published_at": e.published_at,
+            "evidence_count": int(evidence_counts.get(e.id, 0)),
         }
         for e in entries
     ]
@@ -103,9 +121,7 @@ def toggle_vault_entry_visibility(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     entry.is_public = make_public
-    entry.published_at = (
-        datetime.now(timezone.utc) if make_public else None
-    )
+    entry.published_at = datetime.now(timezone.utc) if make_public else None
 
     db.commit()
 
@@ -144,3 +160,30 @@ def public_vault_feed(
         }
         for e in entries
     ]
+
+
+# ======================================================
+# 5️⃣ GET EVIDENCE FOR A VAULT ENTRY (OWNER ONLY)
+# ======================================================
+@router.get("/{entry_id}/evidence", response_model=List[EvidenceOut])
+def get_vault_entry_evidence(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entry = db.query(VaultEntry).filter(VaultEntry.id == entry_id).first()
+
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    if entry.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    evidence_items = (
+        db.query(Evidence)
+        .filter(Evidence.vault_entry_id == entry_id)
+        .order_by(Evidence.timestamp.desc())
+        .all()
+    )
+
+    return evidence_items
