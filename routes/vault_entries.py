@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, List
@@ -11,6 +10,7 @@ from models.evidence import Evidence
 from models.user import User
 from utils.auth import get_current_user
 from schemas.evidence import EvidenceOut
+from schemas.vault_entry import VaultEntryCreate  # ✅ NEW
 
 router = APIRouter(
     prefix="/vault-entries",
@@ -18,33 +18,27 @@ router = APIRouter(
 )
 
 # ======================================================
-# 1️⃣ CREATE VAULT ENTRY (PRIVATE OR PUBLIC)
+# 1️⃣ CREATE VAULT ENTRY (JSON BODY – FIXED)
 # ======================================================
 @router.post("", response_model=dict)
 def create_vault_entry(
-    testimony: str,
-    entity_id: Optional[int] = None,
-    incident_date: Optional[datetime] = None,
-    location: Optional[str] = None,
-    category: Optional[str] = None,
-    is_anonymous: bool = False,
-    is_public: bool = False,
+    payload: VaultEntryCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not testimony or not testimony.strip():
+    if not payload.testimony or not payload.testimony.strip():
         raise HTTPException(status_code=400, detail="Testimony is required")
 
     entry = VaultEntry(
         user_id=current_user.id,
-        entity_id=entity_id,
-        testimony=testimony.strip(),
-        incident_date=incident_date,
-        location=location,
-        category=category,
-        is_anonymous=is_anonymous,
-        is_public=is_public,
-        published_at=datetime.now(timezone.utc) if is_public else None,
+        entity_id=payload.entity_id,
+        testimony=payload.testimony.strip(),
+        incident_date=payload.incident_date,
+        location=payload.location,
+        category=payload.category,
+        is_anonymous=payload.is_anonymous,
+        is_public=payload.is_public,
+        published_at=datetime.now(timezone.utc) if payload.is_public else None,
     )
 
     db.add(entry)
@@ -55,12 +49,11 @@ def create_vault_entry(
         "id": entry.id,
         "created_at": entry.created_at,
         "is_public": entry.is_public,
+        "entity_id": entry.entity_id,
     }
 
-
 # ======================================================
-# 2️⃣ USER PROFILE – VIEW OWN ENTRIES (PRIVATE + PUBLIC)
-#    NOW INCLUDES: evidence_count
+# 2️⃣ USER PROFILE – VIEW OWN ENTRIES
 # ======================================================
 @router.get("/mine", response_model=list[dict])
 def get_my_vault_entries(
@@ -84,7 +77,9 @@ def get_my_vault_entries(
             .group_by(Evidence.vault_entry_id)
             .all()
         )
-        evidence_counts = {vault_entry_id: count for vault_entry_id, count in rows}
+        evidence_counts = {
+            vault_entry_id: count for vault_entry_id, count in rows
+        }
 
     return [
         {
@@ -102,9 +97,8 @@ def get_my_vault_entries(
         for e in entries
     ]
 
-
 # ======================================================
-# 3️⃣ TOGGLE VISIBILITY (OWNER ONLY)
+# 3️⃣ TOGGLE VISIBILITY
 # ======================================================
 @router.patch("/{entry_id}/visibility", response_model=dict)
 def toggle_vault_entry_visibility(
@@ -132,9 +126,8 @@ def toggle_vault_entry_visibility(
         "published_at": entry.published_at,
     }
 
-
 # ======================================================
-# 4️⃣ PUBLIC VAULT FEED (DOCUMENTATION-FIRST)
+# 4️⃣ PUBLIC VAULT FEED
 # ======================================================
 @router.get("/feed", response_model=list[dict])
 def public_vault_feed(
@@ -162,9 +155,8 @@ def public_vault_feed(
         for e in entries
     ]
 
-
 # ======================================================
-# 5️⃣ GET EVIDENCE FOR A VAULT ENTRY (OWNER ONLY)
+# 5️⃣ GET EVIDENCE FOR A VAULT ENTRY
 # ======================================================
 @router.get("/{entry_id}/evidence", response_model=List[EvidenceOut])
 def get_vault_entry_evidence(
@@ -188,8 +180,9 @@ def get_vault_entry_evidence(
     )
 
     return evidence_items
+
 # ======================================================
-# 6️⃣ UPDATE VAULT ENTRY (OWNER OR ADMIN)
+# 6️⃣ UPDATE VAULT ENTRY (STILL OLD – STEP 2 LATER)
 # ======================================================
 @router.patch("/{entry_id}", response_model=dict)
 def update_vault_entry(
@@ -209,9 +202,7 @@ def update_vault_entry(
 
     entry.testimony = testimony.strip()
     entry.is_public = is_public
-    entry.published_at = (
-        datetime.now(timezone.utc) if is_public else None
-    )
+    entry.published_at = datetime.now(timezone.utc) if is_public else None
 
     db.commit()
 
@@ -220,8 +211,9 @@ def update_vault_entry(
         "is_public": entry.is_public,
         "published_at": entry.published_at,
     }
+
 # ======================================================
-# 7️⃣ DELETE VAULT ENTRY (ADMIN ONLY)
+# 7️⃣ DELETE VAULT ENTRY (ADMIN)
 # ======================================================
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_vault_entry_admin(
@@ -237,28 +229,9 @@ def delete_vault_entry_admin(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    # Delete attached evidence first (FK safety)
     db.query(Evidence).filter(
         Evidence.vault_entry_id == entry_id
     ).delete()
 
     db.delete(entry)
     db.commit()
-    return
-@router.delete("/admin/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
-def admin_delete_evidence(
-    evidence_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
-
-    if not evidence:
-        raise HTTPException(status_code=404, detail="Evidence not found")
-
-    db.delete(evidence)
-    db.commit()
-    return
