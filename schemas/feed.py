@@ -23,8 +23,9 @@ class VaultRecordFeedItem(FeedItemBase):
     type: Literal["vault_record"]
     entity: Optional[RatedEntityOut] = None
     description: str
-    media: list[dict] = []
+    evidence: list[dict] = []   # ✅ rename + align with frontend
     user: Optional[PublicUserOut] = None
+
 
 
 

@@ -50,7 +50,8 @@ def unified_feed(
             "created_at": v.published_at or v.created_at,
             "entity": v.entity,
             "description": v.testimony,
-            "media": [
+            "user": v.user,
+            "evidence": [
                 {
                     "id": ev.id,
                     "blob_url": ev.blob_url,
@@ -58,7 +59,6 @@ def unified_feed(
                 }
                 for ev in evidence_items
             ],
-            "user": v.user,
         })
 
     # =====================================================
