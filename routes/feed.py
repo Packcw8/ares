@@ -3,11 +3,10 @@ from sqlalchemy.orm import Session
 from db import get_db
 
 from models.vault_entry import VaultEntry
-from models.rating import RatedEntity, RatingCategoryScore
+from models.rating import RatingCategoryScore
 from models.official_post import OfficialPost
-from schemas.feed import FeedItemOut
 from models.evidence import Evidence
-
+from schemas.feed import FeedItemOut
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -20,7 +19,7 @@ def unified_feed(
     q: str | None = Query(None),
     limit: int = 50,
 ):
-    items = []
+    items: list[dict] = []
 
     # =====================================================
     # Public Vault Records
@@ -62,37 +61,21 @@ def unified_feed(
         })
 
     # =====================================================
-    # Newly Approved / Created Entities
+    # Ratings (ENTITY SURFACES HERE)
     # =====================================================
-    entity_q = db.query(RatedEntity).filter(
-        RatedEntity.approval_status == "approved"
-    )
+    ratings_q = db.query(RatingCategoryScore)
 
     if state:
-        entity_q = entity_q.filter(RatedEntity.state == state)
+        ratings_q = ratings_q.filter(
+            RatingCategoryScore.entity.has(state=state)
+        )
     if county:
-        entity_q = entity_q.filter(RatedEntity.county == county)
+        ratings_q = ratings_q.filter(
+            RatingCategoryScore.entity.has(county=county)
+        )
 
-    entities = (
-        entity_q
-        .order_by(RatedEntity.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-    for e in entities:
-        items.append({
-            "type": "entity_created",
-            "created_at": e.created_at,
-            "entity": e,
-            "user": None,
-        })
-
-    # =====================================================
-    # Ratings
-    # =====================================================
     ratings = (
-        db.query(RatingCategoryScore)
+        ratings_q
         .order_by(RatingCategoryScore.created_at.desc())
         .limit(limit)
         .all()
@@ -123,7 +106,10 @@ def unified_feed(
 
     posts = (
         posts_q
-        .order_by(OfficialPost.is_pinned.desc(), OfficialPost.created_at.desc())
+        .order_by(
+            OfficialPost.is_pinned.desc(),
+            OfficialPost.created_at.desc()
+        )
         .limit(limit)
         .all()
     )

@@ -23,23 +23,12 @@ class VaultRecordFeedItem(FeedItemBase):
     type: Literal["vault_record"]
     entity: Optional[RatedEntityOut] = None
     description: str
-    evidence: list[dict] = []   # ✅ rename + align with frontend
-    user: Optional[PublicUserOut] = None
-
-
-
-
-# ======================================================
-# Entity Created Feed Item
-# ======================================================
-class EntityCreatedFeedItem(FeedItemBase):
-    type: Literal["entity_created"]
-    entity: RatedEntityOut
+    evidence: list[dict] = []
     user: Optional[PublicUserOut] = None
 
 
 # ======================================================
-# Rating Feed Item
+# Rating Feed Item (ENTITY APPEARS HERE)
 # ======================================================
 class RatingFeedItem(FeedItemBase):
     type: Literal["rating"]
@@ -62,11 +51,10 @@ class ForumPostFeedItem(FeedItemBase):
 
 
 # ======================================================
-# Unified Feed Output (Discriminated Union)
+# Unified Feed Output
 # ======================================================
 FeedItemOut = Union[
     VaultRecordFeedItem,
-    EntityCreatedFeedItem,
     RatingFeedItem,
     ForumPostFeedItem,
 ]
