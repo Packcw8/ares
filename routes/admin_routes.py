@@ -333,4 +333,27 @@ def list_all_entities(
         .all()
     )
 
+# ======================================================
+# 🏷️ ENTITY MODERATION
+# ======================================================
+@router.post("/entities/{entity_id}/retire")
+def retire_entity(
+    entity_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    entity = db.query(RatedEntity).filter(RatedEntity.id == entity_id).first()
 
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    if entity.approval_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Only approved entities can be retired"
+        )
+
+    entity.approval_status = "retired"
+    db.commit()
+
+    return {"message": "Entity retired successfully"}
