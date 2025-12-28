@@ -10,6 +10,7 @@ from models.rating import RatedEntity, RatingCategoryScore
 from models.evidence import Evidence
 from utils.auth import get_current_user
 from schemas.rating_schemas import RatedEntityOut
+from schemas.entity_admin import AdminEntityUpdate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -287,3 +288,49 @@ def admin_counts(
         "unverified_ratings": unverified_ratings or 0,
         "flagged_evidence": flagged_evidence or 0,
     }
+
+# ======================================================
+# 🔔 Edit Officials
+# ======================================================
+
+@router.patch("/entities/{entity_id}")
+def admin_update_entity(
+    entity_id: int,
+    payload: AdminEntityUpdate,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    entity = db.query(RatedEntity).filter(RatedEntity.id == entity_id).first()
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    if entity.approval_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Only approved entities may be edited"
+        )
+
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(entity, field, value)
+
+    db.commit()
+    db.refresh(entity)
+
+    return {
+        "message": "Entity updated successfully",
+        "entity_id": entity.id
+    }
+
+@router.get("/entities")
+def list_all_entities(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    return (
+        db.query(RatedEntity)
+        .order_by(RatedEntity.created_at.desc())
+        .all()
+    )
+
+
