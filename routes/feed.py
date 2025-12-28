@@ -6,6 +6,8 @@ from models.vault_entry import VaultEntry
 from models.rating import RatedEntity, RatingCategoryScore
 from models.official_post import OfficialPost
 from schemas.feed import FeedItemOut
+from models.evidence import Evidence
+
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -33,12 +35,29 @@ def unified_feed(
     vault_entries = vault_q.limit(limit).all()
 
     for v in vault_entries:
+        evidence_items = (
+            db.query(Evidence)
+            .filter(
+                Evidence.vault_entry_id == v.id,
+                Evidence.is_public == True,
+            )
+            .order_by(Evidence.timestamp.desc())
+            .all()
+        )
+
         items.append({
             "type": "vault_record",
             "created_at": v.published_at or v.created_at,
             "entity": v.entity,
             "description": v.testimony,
-            "media_url": None,
+            "media": [
+                {
+                    "id": ev.id,
+                    "blob_url": ev.blob_url,
+                    "description": ev.description,
+                }
+                for ev in evidence_items
+            ],
             "user": v.user,
         })
 
