@@ -127,7 +127,37 @@ def unified_feed(
         })
 
     # =====================================================
-    # Final sort & trim
+    # Type-balanced feed ordering
     # =====================================================
-    items.sort(key=lambda x: x["created_at"], reverse=True)
-    return items[:limit]
+
+    from collections import defaultdict
+
+    grouped = defaultdict(list)
+
+    for item in items:
+        grouped[item["type"]].append(item)
+
+    # Sort each group by recency
+    for group in grouped.values():
+        group.sort(key=lambda x: x["created_at"], reverse=True)
+
+    # Interleave items by type
+    ordered = []
+    types_cycle = ["vault_record", "rating", "forum_post"]
+
+    while len(ordered) < limit:
+        progressed = False
+
+        for t in types_cycle:
+            if grouped[t]:
+                ordered.append(grouped[t].pop(0))
+                progressed = True
+
+            if len(ordered) >= limit:
+                break
+
+        if not progressed:
+            break  # nothing left to add
+
+    return ordered
+
