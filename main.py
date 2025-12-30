@@ -17,6 +17,7 @@ from routes import evidence
 from routes import vault_entries
 from routes import feed
 from routes import entities
+from routes.policy_routes import router as policy_router
 
 
 # Import all models so SQLAlchemy registers tables
@@ -67,6 +68,7 @@ app.include_router(evidence.router)
 app.include_router(vault_entries.router)
 app.include_router(feed.router)
 app.include_router(entities.router)
+app.include_router(policy_router)
 
 
 # Optional forum trailing-slash fix
