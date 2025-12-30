@@ -104,3 +104,20 @@ class EvidenceAttachment(Base):
     )
 
     entity = relationship("RatedEntity", back_populates="evidence")
+
+
+# ======================================================
+# Rated Policy
+# ======================================================
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship
+
+# inside Policy model
+rated_entity_id = Column(
+    Integer,
+    ForeignKey("rated_entities.id"),
+    nullable=True,
+    index=True
+)
+
+rated_entity = relationship("RatedEntity")

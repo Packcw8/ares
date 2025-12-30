@@ -5,6 +5,7 @@ from datetime import datetime
 from db import get_db
 from routes.auth_routes import get_current_user
 
+from models.rating import RatedEntity
 from models.policy import (
     Policy,
     PolicyStatus,
@@ -21,6 +22,7 @@ from schemas.policy_schemas import (
 )
 
 router = APIRouter(prefix="/policies", tags=["Policies"])
+
 
 # ======================================================
 # PUBLIC — READ ONLY
@@ -43,8 +45,9 @@ def get_policy(policy_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Policy not found")
     return policy
 
+
 # ======================================================
-# ADMIN — CREATE POLICY
+# ADMIN — CREATE POLICY (IMMEDIATE APPROVAL)
 # ======================================================
 
 @router.post("/", response_model=PolicyOut)
@@ -62,6 +65,22 @@ def create_policy(
             detail="state_code is required for state-level policies",
         )
 
+    # 🔒 Prevent duplicates
+    existing = (
+        db.query(Policy)
+        .filter(
+            Policy.title == data.title,
+            Policy.jurisdiction_level == data.jurisdiction_level,
+            Policy.state_code == data.state_code,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="A policy with this title already exists for this jurisdiction",
+        )
+
     policy = Policy(
         title=data.title,
         summary=data.summary,
@@ -70,6 +89,74 @@ def create_policy(
         governing_body=data.governing_body,
         introduced_date=data.introduced_date,
         created_by=current_user.id,
+        is_active=True,
+        last_verified_at=datetime.utcnow(),
+    )
+
+    db.add(policy)
+    db.flush()
+
+    rated_entity = RatedEntity(
+        name=data.title,
+        type="policy",
+        category="policy",
+        jurisdiction=data.jurisdiction_level,
+        state=data.state_code or "US",
+        county="N/A",
+        approval_status="approved",
+        approved_by=current_user.id,
+    )
+
+    db.add(rated_entity)
+    db.flush()
+
+    policy.rated_entity_id = rated_entity.id
+
+    db.commit()
+    db.refresh(policy)
+    return policy
+
+
+# ======================================================
+# USER — SUBMIT POLICY FOR REVIEW
+# ======================================================
+
+@router.post("/submit", response_model=PolicyOut)
+def submit_policy_for_review(
+    data: PolicyCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if data.jurisdiction_level == "state" and not data.state_code:
+        raise HTTPException(
+            status_code=400,
+            detail="state_code is required for state-level policies",
+        )
+
+    existing = (
+        db.query(Policy)
+        .filter(
+            Policy.title == data.title,
+            Policy.jurisdiction_level == data.jurisdiction_level,
+            Policy.state_code == data.state_code,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="A policy with this title already exists for this jurisdiction",
+        )
+
+    policy = Policy(
+        title=data.title,
+        summary=data.summary,
+        jurisdiction_level=data.jurisdiction_level,
+        state_code=data.state_code,
+        governing_body=data.governing_body,
+        introduced_date=data.introduced_date,
+        created_by=current_user.id,
+        is_active=False,  # ⛔ pending review
     )
 
     db.add(policy)
@@ -77,8 +164,96 @@ def create_policy(
     db.refresh(policy)
     return policy
 
+
 # ======================================================
-# USER — SUBMIT STATUS CHANGE REQUEST
+# ADMIN — LIST PENDING POLICIES
+# ======================================================
+
+@router.get("/pending")
+def list_pending_policies(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    return (
+        db.query(Policy)
+        .filter(Policy.is_active == False)
+        .order_by(Policy.created_at.asc())
+        .all()
+    )
+
+
+# ======================================================
+# ADMIN — APPROVE USER SUBMISSION
+# ======================================================
+
+@router.post("/{policy_id}/approve", response_model=PolicyOut)
+def approve_policy_submission(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    policy = db.query(Policy).filter(Policy.id == policy_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    if policy.is_active:
+        raise HTTPException(status_code=400, detail="Policy already approved")
+
+    rated_entity = RatedEntity(
+        name=policy.title,
+        type="policy",
+        category="policy",
+        jurisdiction=policy.jurisdiction_level,
+        state=policy.state_code or "US",
+        county="N/A",
+        approval_status="approved",
+        approved_by=current_user.id,
+    )
+
+    db.add(rated_entity)
+    db.flush()
+
+    policy.is_active = True
+    policy.rated_entity_id = rated_entity.id
+    policy.last_verified_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(policy)
+    return policy
+
+
+# ======================================================
+# ADMIN — REJECT USER SUBMISSION
+# ======================================================
+
+@router.post("/{policy_id}/reject")
+def reject_policy_submission(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    policy = db.query(Policy).filter(Policy.id == policy_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    policy.is_active = False
+    policy.last_verified_at = datetime.utcnow()
+
+    db.commit()
+    return {"status": "rejected"}
+
+
+# ======================================================
+# USER — STATUS CHANGE REQUESTS (UNCHANGED)
 # ======================================================
 
 @router.post(
@@ -111,9 +286,6 @@ def submit_status_change_request(
     db.refresh(request)
     return request
 
-# ======================================================
-# ADMIN — REVIEW STATUS CHANGE REQUEST
-# ======================================================
 
 @router.post("/status-request/{request_id}/review")
 def review_status_change_request(
@@ -150,7 +322,6 @@ def review_status_change_request(
             note=req.note,
         )
         db.add(history)
-
         req.approval_status = ApprovalStatus.approved
     else:
         req.approval_status = ApprovalStatus.rejected
@@ -160,22 +331,3 @@ def review_status_change_request(
 
     db.commit()
     return {"status": req.approval_status.value}
-
-# ======================================================
-# ADMIN — PENDING REQUEST QUEUE
-# ======================================================
-
-@router.get("/status-requests/pending")
-def list_pending_status_requests(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    return (
-        db.query(PolicyStatusChangeRequest)
-        .filter(PolicyStatusChangeRequest.approval_status == ApprovalStatus.pending)
-        .order_by(PolicyStatusChangeRequest.created_at.asc())
-        .all()
-    )
