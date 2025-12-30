@@ -39,7 +39,7 @@ def list_policies(db: Session = Depends(get_db)):
 
 
 # ======================================================
-# ADMIN — LIST PENDING POLICIES  ✅ MUST BE ABOVE {policy_id}
+# ADMIN — LIST PENDING POLICIES
 # ======================================================
 
 @router.get("/pending")
@@ -85,7 +85,7 @@ def list_pending_status_requests(
 
 
 # ======================================================
-# PUBLIC — SINGLE POLICY (⚠️ MUST COME AFTER STATIC ROUTES)
+# PUBLIC — SINGLE POLICY
 # ======================================================
 
 @router.get("/{policy_id}", response_model=PolicyOut)
@@ -146,11 +146,11 @@ def create_policy(
     db.flush()
 
     rated_entity = RatedEntity(
-        name=data.title,
+        name=policy.title,
         type="policy",
         category="policy",
-        jurisdiction=data.jurisdiction_level,
-        state=data.state_code or "US",
+        jurisdiction=policy.jurisdiction_level.value,  # ✅ FIX
+        state=policy.state_code or "US",
         county="N/A",
         approval_status="approved",
         approved_by=current_user.id,
@@ -180,21 +180,6 @@ def submit_policy_for_review(
         raise HTTPException(
             status_code=400,
             detail="state_code is required for state-level policies",
-        )
-
-    existing = (
-        db.query(Policy)
-        .filter(
-            Policy.title == data.title,
-            Policy.jurisdiction_level == data.jurisdiction_level,
-            Policy.state_code == data.state_code,
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="A policy with this title already exists for this jurisdiction",
         )
 
     policy = Policy(
@@ -238,7 +223,7 @@ def approve_policy_submission(
         name=policy.title,
         type="policy",
         category="policy",
-        jurisdiction=policy.jurisdiction_level,
+        jurisdiction=policy.jurisdiction_level.value,  # ✅ FIX (THIS WAS THE CRASH)
         state=policy.state_code or "US",
         county="N/A",
         approval_status="approved",
