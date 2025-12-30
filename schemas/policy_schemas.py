@@ -26,6 +26,7 @@ class PolicyOut(BaseModel):
     current_status_id: Optional[int]
     introduced_date: Optional[date]
     is_active: bool
+    rated_entity_id: Optional[int]
     created_at: datetime
 
     model_config = {"from_attributes": True}
