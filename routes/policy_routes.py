@@ -38,6 +38,56 @@ def list_policies(db: Session = Depends(get_db)):
     )
 
 
+# ======================================================
+# ADMIN — LIST PENDING POLICIES  ✅ MUST BE ABOVE {policy_id}
+# ======================================================
+
+@router.get("/pending")
+def list_pending_policies(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    return (
+        db.query(Policy)
+        .filter(Policy.is_active == False)
+        .order_by(Policy.created_at.asc())
+        .all()
+    )
+
+
+# ======================================================
+# ADMIN — LIST PENDING STATUS CHANGE REQUESTS
+# ======================================================
+
+@router.get(
+    "/status-requests/pending",
+    response_model=list[PolicyStatusChangeRequestOut],
+)
+def list_pending_status_requests(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    return (
+        db.query(PolicyStatusChangeRequest)
+        .filter(
+            PolicyStatusChangeRequest.approval_status
+            == ApprovalStatus.pending
+        )
+        .order_by(PolicyStatusChangeRequest.created_at.asc())
+        .all()
+    )
+
+
+# ======================================================
+# PUBLIC — SINGLE POLICY (⚠️ MUST COME AFTER STATIC ROUTES)
+# ======================================================
+
 @router.get("/{policy_id}", response_model=PolicyOut)
 def get_policy(policy_id: int, db: Session = Depends(get_db)):
     policy = db.query(Policy).get(policy_id)
@@ -65,7 +115,6 @@ def create_policy(
             detail="state_code is required for state-level policies",
         )
 
-    # 🔒 Prevent duplicates
     existing = (
         db.query(Policy)
         .filter(
@@ -156,33 +205,13 @@ def submit_policy_for_review(
         governing_body=data.governing_body,
         introduced_date=data.introduced_date,
         created_by=current_user.id,
-        is_active=False,  # ⛔ pending review
+        is_active=False,
     )
 
     db.add(policy)
     db.commit()
     db.refresh(policy)
     return policy
-
-
-# ======================================================
-# ADMIN — LIST PENDING POLICIES
-# ======================================================
-
-@router.get("/pending")
-def list_pending_policies(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    return (
-        db.query(Policy)
-        .filter(Policy.is_active == False)
-        .order_by(Policy.created_at.asc())
-        .all()
-    )
 
 
 # ======================================================
@@ -250,34 +279,15 @@ def reject_policy_submission(
 
     db.commit()
     return {"status": "rejected"}
-# ======================================================
-# ADMIN — LIST PENDING STATUS CHANGE REQUESTS
-# ======================================================
-
-@router.get("/status-requests/pending", response_model=list[PolicyStatusChangeRequestOut])
-def list_pending_status_requests(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    return (
-        db.query(PolicyStatusChangeRequest)
-        .filter(PolicyStatusChangeRequest.approval_status == ApprovalStatus.pending)
-        .order_by(PolicyStatusChangeRequest.created_at.asc())
-        .all()
-    )
-
 
 
 # ======================================================
-# USER — STATUS CHANGE REQUESTS (UNCHANGED)
+# USER — STATUS CHANGE REQUESTS
 # ======================================================
 
 @router.post(
     "/status-request",
-    response_model=PolicyStatusChangeRequestOut
+    response_model=PolicyStatusChangeRequestOut,
 )
 def submit_status_change_request(
     data: PolicyStatusChangeRequestCreate,
