@@ -96,15 +96,22 @@ def create_entity(
 @router.get("/entities", response_model=List[RatedEntityOut])
 def list_entities(
     db: Session = Depends(get_db),
+
+    # existing filters
     type: str = Query(None),
     category: str = Query(None),
     jurisdiction: str = Query(None),
-    sort_by: str = Query("reputation_score"),
+
+    # pagination
+    limit: int = Query(20, le=50),
+    cursor_score: float = Query(None),
+    cursor_id: int = Query(None),
 ):
     query = db.query(RatedEntity).filter(
         RatedEntity.approval_status == "approved"
     )
 
+    # filters
     if type:
         query = query.filter(RatedEntity.type == type)
     if category:
@@ -112,12 +119,26 @@ def list_entities(
     if jurisdiction:
         query = query.filter(RatedEntity.jurisdiction == jurisdiction)
 
-    if sort_by == "created_at":
-        query = query.order_by(RatedEntity.created_at.desc())
-    else:
-        query = query.order_by(RatedEntity.reputation_score.asc())
+    # cursor pagination (LOW → HIGH)
+    if cursor_score is not None and cursor_id is not None:
+        query = query.filter(
+            (
+                (RatedEntity.reputation_score > cursor_score) |
+                (
+                    (RatedEntity.reputation_score == cursor_score) &
+                    (RatedEntity.id > cursor_id)
+                )
+            )
+        )
 
-    return query.all()
+    # stable ordering
+    query = query.order_by(
+        RatedEntity.reputation_score.asc(),
+        RatedEntity.id.asc()
+    )
+
+    return query.limit(limit).all()
+
 
 
 # ======================================================

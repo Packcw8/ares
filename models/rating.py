@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from db import Base
@@ -11,9 +11,13 @@ from db import Base
 class RatedEntity(Base):
     __tablename__ = "rated_entities"
 
+    __table_args__ = (
+        Index("idx_reputation_cursor", "reputation_score", "id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # official, agency, institution
+    type = Column(String, nullable=False)
     category = Column(String, nullable=True)
     jurisdiction = Column(String)
     state = Column(String, nullable=False, index=True)
@@ -21,7 +25,6 @@ class RatedEntity(Base):
 
     reputation_score = Column(Float, default=100.0)
 
-    # 🔒 Moderation / Approval
     approval_status = Column(String, nullable=False, default="under_review")
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
@@ -43,7 +46,6 @@ class RatedEntity(Base):
         back_populates="entity",
         cascade="all, delete-orphan"
     )
-
 
 # ======================================================
 # Category-Based Rating Score
