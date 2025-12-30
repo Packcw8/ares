@@ -97,6 +97,9 @@ def create_entity(
 def list_entities(
     db: Session = Depends(get_db),
 
+    # 🔍 SEARCH (NEW)
+    search: str = Query(None),
+
     # existing filters
     type: str = Query(None),
     category: str = Query(None),
@@ -107,6 +110,37 @@ def list_entities(
     cursor_score: float = Query(None),
     cursor_id: int = Query(None),
 ):
+    # ======================================================
+    # SEARCH MODE (bypasses cursor pagination)
+    # ======================================================
+    if search:
+        q = f"%{search.lower()}%"
+
+        return (
+            db.query(RatedEntity)
+            .filter(
+                RatedEntity.approval_status == "approved",
+                func.lower(
+                    RatedEntity.name
+                    + " "
+                    + RatedEntity.state
+                    + " "
+                    + RatedEntity.county
+                    + " "
+                    + func.coalesce(RatedEntity.category, "")
+                    + " "
+                    + func.coalesce(RatedEntity.jurisdiction, "")
+                ).like(q)
+            )
+            .order_by(
+                RatedEntity.reputation_score.asc(),
+                RatedEntity.id.asc()
+            )
+            .limit(100)
+            .all()
+        )
+
+
     query = db.query(RatedEntity).filter(
         RatedEntity.approval_status == "approved"
     )
