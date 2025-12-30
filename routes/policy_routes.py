@@ -250,6 +250,25 @@ def reject_policy_submission(
 
     db.commit()
     return {"status": "rejected"}
+# ======================================================
+# ADMIN — LIST PENDING STATUS CHANGE REQUESTS
+# ======================================================
+
+@router.get("/status-requests/pending", response_model=list[PolicyStatusChangeRequestOut])
+def list_pending_status_requests(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    return (
+        db.query(PolicyStatusChangeRequest)
+        .filter(PolicyStatusChangeRequest.approval_status == ApprovalStatus.pending)
+        .order_by(PolicyStatusChangeRequest.created_at.asc())
+        .all()
+    )
+
 
 
 # ======================================================
