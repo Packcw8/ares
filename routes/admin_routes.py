@@ -11,6 +11,7 @@ from models.evidence import Evidence
 from utils.auth import get_current_user
 from schemas.rating_schemas import RatedEntityOut
 from schemas.entity_admin import AdminEntityUpdate
+from datetime import timedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -357,3 +358,31 @@ def retire_entity(
     db.commit()
 
     return {"message": "Entity retired successfully"}
+
+@router.get("/users/new")
+def get_new_users(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    users = (
+        db.query(User)
+        .filter(User.created_at >= since)
+        .order_by(User.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "is_email_verified": u.is_email_verified,
+            "is_verified": u.is_verified,
+            "created_at": u.created_at,
+        }
+        for u in users
+    ]

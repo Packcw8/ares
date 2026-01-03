@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from db import Base
+from datetime import datetime, timezone
+
 
 class User(Base):
     __tablename__ = "users"
@@ -35,3 +37,9 @@ class User(Base):
     jurisdiction = Column(String, nullable=True)
 
     is_anonymous = Column(Boolean, default=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
