@@ -29,10 +29,23 @@ class RatedEntity(Base):
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ✅ NEW: who created the entity
+    created_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False
+    )
+
+    # Optional but recommended
+    creator = relationship(
+        "User",
+        foreign_keys=[created_by_user_id]
     )
 
     ratings = relationship(
@@ -46,6 +59,7 @@ class RatedEntity(Base):
         back_populates="entity",
         cascade="all, delete-orphan"
     )
+
 
 # ======================================================
 # Category-Based Rating Score
