@@ -12,6 +12,8 @@ from utils.auth import get_current_user
 from schemas.rating_schemas import RatedEntityOut
 from schemas.entity_admin import AdminEntityUpdate
 from datetime import timedelta
+from utils.email import send_entity_approved_email
+
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -127,6 +129,10 @@ def verify_official(
 # ======================================================
 # 🏷️ ENTITY MODERATION
 # ======================================================
+# ======================================================
+# 🏷️ ENTITY MODERATION
+# ======================================================
+
 @router.get("/entities/pending", response_model=List[RatedEntityOut])
 def get_pending_entities(
     db: Session = Depends(get_db),
@@ -151,12 +157,35 @@ def approve_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
+    # --------------------------------------------------
+    # ✅ APPROVE ENTITY
+    # --------------------------------------------------
+    was_pending = entity.approval_status == "under_review"
+
     entity.approval_status = "approved"
     entity.approved_by = admin_user.id
     entity.approved_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(entity)
+
+    # --------------------------------------------------
+    # 📧 EMAIL ENTITY CREATOR (ONE-TIME)
+    # --------------------------------------------------
+    # Only send email if:
+    # - entity was pending (prevents duplicate emails)
+    # - entity has a recorded creator
+    if was_pending and entity.created_by_user_id:
+        user = db.query(User).filter(
+            User.id == entity.created_by_user_id
+        ).first()
+
+        if user and user.email:
+            send_entity_approved_email(
+                to_email=user.email,
+                entity_name=entity.name
+            )
+
     return entity
 
 
@@ -178,6 +207,7 @@ def reject_entity(
     db.commit()
     db.refresh(entity)
     return entity
+
 
 
 # ======================================================
