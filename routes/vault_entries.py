@@ -238,3 +238,34 @@ def delete_vault_entry_admin(
 
     db.delete(entry)
     db.commit()
+# ======================================================
+# 🔐 ADMIN – VIEW ALL VAULT ENTRIES
+# ======================================================
+@router.get("/admin/all", response_model=list[dict])
+def admin_get_all_vault_entries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    entries = (
+        db.query(VaultEntry)
+        .order_by(VaultEntry.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": e.id,
+            "testimony": e.testimony,
+            "entity": e.entity.name if e.entity else None,
+            "entity_id": e.entity_id,
+            "user_id": e.user_id,
+            "is_public": e.is_public,
+            "is_anonymous": e.is_anonymous,
+            "created_at": e.created_at,
+            "published_at": e.published_at,
+        }
+        for e in entries
+    ]
