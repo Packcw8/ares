@@ -447,3 +447,27 @@ def get_my_rating_for_entity(
         )
 
     return rating
+# ======================================================
+# Get Single Approved Entity by ID (PUBLIC)
+# ======================================================
+@router.get("/entity/{entity_id}", response_model=RatedEntityOut)
+def get_entity_by_id(
+    entity_id: int,
+    db: Session = Depends(get_db),
+):
+    entity = (
+        db.query(RatedEntity)
+        .filter(
+            RatedEntity.id == entity_id,
+            RatedEntity.approval_status == "approved",
+        )
+        .first()
+    )
+
+    if not entity:
+        raise HTTPException(
+            status_code=404,
+            detail="Entity not found or not approved",
+        )
+
+    return entity
