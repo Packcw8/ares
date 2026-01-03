@@ -78,6 +78,10 @@ def create_entity(
 
     new_entity = RatedEntity(
         **entity.dict(),
+
+        # ✅ NEW — track who created the entity
+        created_by_user_id=current_user.id,
+
         approval_status="approved" if is_admin else "under_review",
         approved_by=current_user.id if is_admin else None,
         approved_at=datetime.now(timezone.utc) if is_admin else None,
