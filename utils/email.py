@@ -7,7 +7,7 @@ import requests
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "no-reply@aresjustice.com")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "support@aresjustice.com")
 
 RESEND_API_URL = "https://api.resend.com/emails"
 
