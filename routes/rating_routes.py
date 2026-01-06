@@ -32,7 +32,7 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
     )
 
     if not scores:
-        return 100.0
+        return 50.0
 
     total = 0.0
     for s in scores:
@@ -47,7 +47,7 @@ def recalculate_reputation(entity_id: int, db: Session) -> float:
         weight = 2.5 if s.verified else 1.5
         total += (avg - 5) * weight
 
-    return max(0.0, 100.0 + total)
+    return max(0.0, 50.0 + total)
 
 
 # ======================================================
