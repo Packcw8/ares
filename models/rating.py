@@ -23,7 +23,7 @@ class RatedEntity(Base):
     state = Column(String, nullable=False, index=True)
     county = Column(String, nullable=False, index=True)
 
-    reputation_score = Column(Float, default=100.0)
+    reputation_score = Column(Float, default=50.0)
 
     approval_status = Column(String, nullable=False, default="under_review")
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)

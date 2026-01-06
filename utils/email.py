@@ -29,6 +29,7 @@ def send_verification_email(to_email: str, token: str):
 
     payload = {
         "from": FROM_EMAIL,
+        "reply_to": "support@aresjustice.com",
         "to": [to_email],
         "subject": "Confirm your ARES account — Email Verification",
 
@@ -147,6 +148,7 @@ def send_password_reset_email(to_email: str, token: str):
 
     payload = {
         "from": FROM_EMAIL,
+        "reply_to": "support@aresjustice.com",
         "to": [to_email],
         "subject": "ARES Password Reset Request",
 
@@ -259,6 +261,7 @@ def send_entity_approved_email(to_email: str, entity_name: str):
 
     payload = {
         "from": FROM_EMAIL,
+        "reply_to": "support@aresjustice.com",
         "to": [to_email],
         "subject": "Your entity has been approved on ARES",
 
